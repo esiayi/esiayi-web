@@ -39,6 +39,9 @@ use App\Models\Schedule;
 use App\Models\AppointmentSchedule;
 use Auth;
 use App\Services\BookingPricing;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Validation\ValidationException;
 use Razorpay\Api\Errors\SignatureVerificationError;
 
 class PaymentController extends Controller
@@ -574,7 +577,10 @@ class PaymentController extends Controller
                 'amount' => $this->stripeMinorAmount($order_info->total_price, $stripe),
                 'currency' => strtolower($stripe->currency_code),
                 'automatic_payment_methods' => ['enabled' => true],
-                'description' => (string) env('APP_NAME'),
+                // Only authorise on the device; the money is captured once the booking is
+                // confirmed in pay-with-stripe, and released if it cannot be.
+                'capture_method' => 'manual',
+                'description' => (string) config('app.name'),
                 'metadata' => [
                     'service_id' => $service->id,
                     'user_id' => $user->id,
@@ -596,8 +602,10 @@ class PaymentController extends Controller
     }
 
     /**
-     * Card payments from the app, step 2: with payment_intent_id, check the PaymentIntent
-     * with Stripe and place the order. The old flow, where the app posts raw card details
+     * Card payments from the app, step 2: with payment_intent_id, check the authorised
+     * PaymentIntent and the booking, then capture the money and place the order. If the
+     * booking can no longer be made (slot taken, price changed...) the authorisation is
+     * released, so the customer is never charged without a booking. Retries are safe. The old flow, where the app posts raw card details
      * for the server to tokenise, only runs if STRIPE_ALLOW_RAW_CARD_API=true, because it
      * puts card data on this server (and most Stripe accounts reject it anyway).
      */
@@ -613,19 +621,28 @@ class PaymentController extends Controller
             return response()->json(['message' => __('Please update the app to pay by card.')], 422);
         }
 
-        if($legacyCard){
-            $this->validate($request, [
-                'card_number'=>'required',
-                'year'=>'required',
-                'month'=>'required',
-                'cvc'=>'required',
-            ], [
-                'card_number.required' => trans('user_validation.Card number is required'),
-                'year.required' => trans('user_validation.Year is required'),
-                'month.required' => trans('user_validation.Month is required'),
-                'cvc.required' => trans('user_validation.Cvc is required'),
-            ]);
+        if(!$legacyCard){
+            $intentId = (string) $request->payment_intent_id;
+            try {
+                // One request at a time per PaymentIntent, so a double submit cannot book twice.
+                return Cache::lock('stripe-intent:'.$intentId, 60)->block(15, fn () => $this->confirmStripeIntent($request, $slug, $intentId));
+            } catch (LockTimeoutException $e) {
+                return response()->json(['error' => 'Payment is still being processed'], 409);
+            }
         }
+
+        // Legacy raw-card path (only with STRIPE_ALLOW_RAW_CARD_API=true).
+        $this->validate($request, [
+            'card_number'=>'required',
+            'year'=>'required',
+            'month'=>'required',
+            'cvc'=>'required',
+        ], [
+            'card_number.required' => trans('user_validation.Card number is required'),
+            'year.required' => trans('user_validation.Year is required'),
+            'month.required' => trans('user_validation.Month is required'),
+            'cvc.required' => trans('user_validation.Cvc is required'),
+        ]);
 
         $booking = $this->appBooking($request, $slug);
         if($booking instanceof \Illuminate\Http\JsonResponse){
@@ -636,60 +653,36 @@ class PaymentController extends Controller
         $client_id = $user->id;
 
         $stripe = StripePayment::first();
-        $expected = $this->stripeMinorAmount($order_info->total_price, $stripe);
         Stripe\Stripe::setApiKey($stripe->stripe_secret);
 
-        if(!$legacyCard){
-            try {
-                $intent = Stripe\PaymentIntent::retrieve($request->payment_intent_id);
-            } catch (Exception $e) {
-                return response()->json(['error' => 'Payment faild'],403);
-            }
-
-            // The intent must be paid in full, for this customer's booking, and not used before.
-            $paid = $intent->status === 'succeeded'
-                && (int) $intent->amount_received >= $expected
-                && strtolower($intent->currency) === strtolower($stripe->currency_code)
-                && (string) ($intent->metadata['service_id'] ?? '') === (string) $service->id
-                && (string) ($intent->metadata['user_id'] ?? '') === (string) $user->id
-                && (string) ($intent->metadata['booking_date'] ?? '') === (string) $order_info->date
-                && (string) ($intent->metadata['schedule_time_slot'] ?? '') === (string) $order_info->schedule_time_slot
-                && !BookingPricing::transactionUsed('Stripe', $intent->id);
-
-            if(!$paid){
-                return response()->json(['error' => 'Payment faild'],403);
-            }
-            $transaction = $intent->id;
-        }else{
-            try{
-                $token = Stripe\Token::create([
-                    'card' => [
-                        'number' => $request->card_number,
-                        'exp_month' => $request->month,
-                        'exp_year' => $request->year,
-                        'cvc' => $request->cvc,
-                    ],
-                ]);
-            }catch (Exception $e) {
-                return response()->json(['error' => 'Please provide valid card information'],403);
-            }
-
-            if (!isset($token['id'])) {
-                return response()->json(['error' => 'Payment faild'],403);
-            }
-
-            $result = Stripe\Charge::create([
-                'card' => $token['id'],
-                'currency' => $stripe->currency_code,
-                'amount' => $expected,
-                'description' => env('APP_NAME'),
+        try{
+            $token = Stripe\Token::create([
+                'card' => [
+                    'number' => $request->card_number,
+                    'exp_month' => $request->month,
+                    'exp_year' => $request->year,
+                    'cvc' => $request->cvc,
+                ],
             ]);
-
-            if($result['status'] != 'succeeded') {
-                return response()->json(['error' => 'Payment faild'],403);
-            }
-            $transaction = $result['balance_transaction'];
+        }catch (Exception $e) {
+            return response()->json(['error' => 'Please provide valid card information'],403);
         }
+
+        if (!isset($token['id'])) {
+            return response()->json(['error' => 'Payment faild'],403);
+        }
+
+        $result = Stripe\Charge::create([
+            'card' => $token['id'],
+            'currency' => $stripe->currency_code,
+            'amount' => $this->stripeMinorAmount($order_info->total_price, $stripe),
+            'description' => config('app.name'),
+        ]);
+
+        if($result['status'] != 'succeeded') {
+            return response()->json(['error' => 'Payment faild'],403);
+        }
+        $transaction = $result['balance_transaction'];
 
         $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Stripe', 'success', $transaction);
 
@@ -702,6 +695,92 @@ class PaymentController extends Controller
         $notification = trans('user_validation.Your order has been placed. Thanks for your new order');
         return response()->json(['message' => $notification]);
 
+    }
+
+    private function confirmStripeIntent(Request $request, $slug, string $intentId){
+        $failed = response()->json(['error' => 'Payment faild'], 403);
+        $user = Auth::guard('api')->user();
+        $stripe = StripePayment::first();
+        Stripe\Stripe::setApiKey($stripe->stripe_secret);
+
+        try {
+            $intent = Stripe\PaymentIntent::retrieve($intentId);
+        } catch (Exception $e) {
+            return $failed;
+        }
+
+        // Only ever act on this customer's own payment.
+        if((string) ($intent->metadata['user_id'] ?? '') !== (string) $user->id){
+            return $failed;
+        }
+
+        // A retry after the booking was placed.
+        if(BookingPricing::transactionUsed('Stripe', $intent->id)){
+            return response()->json(['message' => trans('user_validation.Your order has been placed. Thanks for your new order')]);
+        }
+
+        if(!in_array($intent->status, ['requires_capture', 'succeeded'], true)){
+            return $failed;
+        }
+
+        try {
+            $booking = $this->appBooking($request, $slug);
+        } catch (ValidationException $e) {
+            $this->releaseStripePayment($intent);
+            throw $e;
+        }
+        if($booking instanceof \Illuminate\Http\JsonResponse){
+            $this->releaseStripePayment($intent);
+            return $booking;
+        }
+        [$service, $order_info] = $booking;
+
+        $authorised = max((int) $intent->amount_capturable, (int) $intent->amount_received);
+        $matches = $authorised >= $this->stripeMinorAmount($order_info->total_price, $stripe)
+            && strtolower($intent->currency) === strtolower($stripe->currency_code)
+            && (string) ($intent->metadata['service_id'] ?? '') === (string) $service->id
+            && (string) ($intent->metadata['booking_date'] ?? '') === (string) $order_info->date
+            && (string) ($intent->metadata['schedule_time_slot'] ?? '') === (string) $order_info->schedule_time_slot;
+
+        if(!$matches){
+            $this->releaseStripePayment($intent);
+            return $failed;
+        }
+
+        if($intent->status === 'requires_capture'){
+            try {
+                $intent = $intent->capture();
+            } catch (Exception $e) {
+                $this->releaseStripePayment($intent);
+                return $failed;
+            }
+            if($intent->status !== 'succeeded'){
+                return $failed;
+            }
+        }
+
+        $order = $this->createOrder($user, $service, $order_info, $service->provider_id, $user->id, 'Stripe', 'success', $intent->id);
+
+        $this->sendMailToClient($user, $order);
+        $this->sendMailToProvider($service->provider, $order);
+
+        return response()->json(['message' => trans('user_validation.Your order has been placed. Thanks for your new order')]);
+    }
+
+    /**
+     * Give the customer's money back when a paid-for booking cannot be made: cancel an
+     * uncaptured authorisation, or refund a captured payment.
+     */
+    private function releaseStripePayment($intent){
+        try {
+            if($intent->status === 'requires_capture'){
+                $intent->cancel();
+            }elseif($intent->status === 'succeeded'){
+                Stripe\Refund::create(['payment_intent' => $intent->id]);
+            }
+        } catch (Exception $e) {
+            report($e);
+        }
     }
 
     /**

@@ -17,6 +17,7 @@ use App\Models\Setting;
 use App\Models\AppointmentSchedule;
 use App\Services\BookingPricing;
 use App\Services\PayPalCheckout;
+use Illuminate\Support\Facades\Cache;
 
 use Str;
 use Cart;
@@ -172,18 +173,20 @@ class PaypalController extends Controller
         $payableAmount = round($total_price * $paypalSetting->currency_rate,2);
 
         try {
-            $paypalOrder = PayPalCheckout::fromSettings()->createOrder(
-                $payableAmount,
-                route('paypal-payment-success-webview'),
-                route('paypal-payment-cancled-webview'),
-                (string) env('APP_NAME')
-            );
+            $paypal = PayPalCheckout::fromSettings();
+            $paypalOrder = $paypal->createOrder($payableAmount, route('paypal-payment-success-webview'), route('paypal-payment-cancled-webview'), (string) config('app.name'));
         } catch (\Exception $ex) {
             return redirect()->route('webview-payment-faild');
         }
 
+        // Remember exactly what this PayPal order pays for (see the success handler).
         Session::put('service', $service);
-        Session::put('paypal_order_id', $paypalOrder['id']);
+        Session::put('paypal_checkout', [
+            'order_id' => $paypalOrder['id'],
+            'amount' => $payableAmount,
+            'currency' => $paypal->currency(),
+            'order_info' => $order_info,
+        ]);
 
         return redirect($paypalOrder['approve_url']);
     }
@@ -193,47 +196,52 @@ class PaypalController extends Controller
         $session_service = Session::get('service');
         $service = $session_service ? Service::where(['slug' => $session_service->slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first() : null;
         $user = Session::get('user');
-        $order_info = json_decode(Session::get('order_info'));
+        $checkout = Session::get('paypal_checkout');
+        $order_info = is_array($checkout) ? json_decode($checkout['order_info']) : null;
 
         // PayPal returns ?token={order id}; it must be the order this session created.
         $paypal_order_id = (string) $request->query('token');
         if (!$service || !$user || !$order_info || ($order_info->service_id ?? null) != $service->id
-            || !$paypal_order_id || $paypal_order_id !== Session::get('paypal_order_id')
-            || BookingPricing::transactionUsed('Paypal', $paypal_order_id)) {
+            || !$paypal_order_id || $paypal_order_id !== $checkout['order_id']) {
             return redirect()->route('webview-payment-faild');
         }
 
         try {
-            $paypal = PayPalCheckout::fromSettings();
-            $capture = $paypal->captureOrder($paypal_order_id);
+            // One request at a time per PayPal order, so a double submit cannot book twice.
+            return Cache::lock('paypal-order:'.$paypal_order_id, 60)->block(15, function () use ($service, $user, $order_info, $checkout, $paypal_order_id) {
+                if (BookingPricing::transactionUsed('Paypal', $paypal_order_id)) {
+                    return redirect()->route('webview-payment-success');
+                }
+
+                $paypal = PayPalCheckout::fromSettings();
+
+                // Check the order before capturing it, while no money has moved.
+                $order = $paypal->getOrder($paypal_order_id);
+                if (!in_array($order['status'], ['APPROVED', 'COMPLETED'], true) || $order['currency'] !== $checkout['currency']
+                    || !BookingPricing::amountCovers($order['amount'], $checkout['amount'])) {
+                    return redirect()->route('webview-payment-faild');
+                }
+
+                $capture = $paypal->captureOrder($paypal_order_id);
+                if ($capture['currency'] !== $checkout['currency'] || !BookingPricing::amountCovers($capture['amount'], $checkout['amount'])) {
+                    $paypal->refundCapture($capture['capture_id']);
+                    return redirect()->route('webview-payment-faild');
+                }
+
+                // A PENDING capture is paid but held by PayPal; admins approve it like a bank transfer.
+                $payment_status = $capture['status'] === 'COMPLETED' ? 'success' : 'pending';
+                $order = $this->createOrder($user, $service, $order_info, $service->provider_id, $user->id, 'Paypal', $payment_status, $paypal_order_id);
+
+                $this->sendMailToClient($user, $order);
+                $this->sendMailToProvider($service->provider, $order);
+
+                Session::forget(['order_info', 'slug', 'request_from', 'user', 'frontend_success_url', 'frontend_faild_url', 'paypal_checkout']);
+
+                return redirect()->route('webview-payment-success');
+            });
         } catch (\Exception $ex) {
             return redirect()->route('webview-payment-faild');
         }
-
-        $paypalSetting = PaypalPayment::first();
-        if ($capture['currency'] != $paypal->currency()
-            || !BookingPricing::amountCovers($capture['amount'], round($order_info->total_price * $paypalSetting->currency_rate, 2))) {
-            return redirect()->route('webview-payment-faild');
-        }
-
-        $provider_id = $service->provider_id;
-        $client_id = $user->id;
-
-        $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Paypal', 'success', $paypal_order_id);
-
-        $provider = $service->provider;
-        $this->sendMailToClient($user, $order);
-        $this->sendMailToProvider($provider, $order);
-
-        Session::forget('order_info');
-        Session::forget('slug');
-        Session::forget('request_from');
-        Session::forget('user');
-        Session::forget('frontend_success_url');
-        Session::forget('frontend_faild_url');
-        Session::forget('paypal_order_id');
-
-        return redirect()->route('webview-payment-success');
     }
 
     public function paypalPaymentCancled(){
@@ -243,6 +251,7 @@ class PaypalController extends Controller
         Session::forget('user');
         Session::forget('frontend_success_url');
         Session::forget('frontend_faild_url');
+        Session::forget('paypal_checkout');
 
         return redirect()->route('webview-payment-faild');
     }

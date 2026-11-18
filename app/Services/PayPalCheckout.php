@@ -39,15 +39,19 @@ class PayPalCheckout
      */
     public function createOrder(float $amount, string $returnUrl, string $cancelUrl, string $description): array
     {
+        $unit = [
+            'amount' => [
+                'currency_code' => $this->currency(),
+                'value' => number_format($amount, 2, '.', ''),
+            ],
+        ];
+        if ($description !== '') {
+            $unit['description'] = mb_substr($description, 0, 127);
+        }
+
         $response = $this->client()->post('/v2/checkout/orders', [
             'intent' => 'CAPTURE',
-            'purchase_units' => [[
-                'description' => mb_substr($description, 0, 127),
-                'amount' => [
-                    'currency_code' => $this->currency(),
-                    'value' => number_format($amount, 2, '.', ''),
-                ],
-            ]],
+            'purchase_units' => [$unit],
             'payment_source' => [
                 'paypal' => [
                     'experience_context' => [
@@ -71,9 +75,32 @@ class PayPalCheckout
     }
 
     /**
-     * Capture an approved order. Returns the completed capture's id, amount and currency.
+     * The order's status and amount, read before capturing so the amount can be checked
+     * while no money has moved yet.
      *
-     * @return array{capture_id: string, amount: string, currency: string}
+     * @return array{status: string, amount: string, currency: string}
+     */
+    public function getOrder(string $orderId): array
+    {
+        $response = $this->client()->get('/v2/checkout/orders/'.rawurlencode($orderId));
+
+        if (!$response->successful() || !$response->json('status')) {
+            throw new RuntimeException('PayPal order could not be read: '.$response->status());
+        }
+
+        return [
+            'status' => $response->json('status'),
+            'amount' => (string) $response->json('purchase_units.0.amount.value'),
+            'currency' => strtoupper((string) $response->json('purchase_units.0.amount.currency_code')),
+        ];
+    }
+
+    /**
+     * Capture an approved order. A capture can be COMPLETED, or PENDING when PayPal holds
+     * the funds (e.g. for review); both mean the customer has paid. If the order was
+     * already captured (a retry), the existing capture is returned.
+     *
+     * @return array{capture_id: string, status: string, amount: string, currency: string}
      */
     public function captureOrder(string $orderId): array
     {
@@ -81,17 +108,33 @@ class PayPalCheckout
             ->withBody('{}', 'application/json')
             ->post('/v2/checkout/orders/'.rawurlencode($orderId).'/capture');
 
+        if (!$response->successful() && $response->json('details.0.issue') === 'ORDER_ALREADY_CAPTURED') {
+            $response = $this->client()->get('/v2/checkout/orders/'.rawurlencode($orderId));
+        }
+
         $capture = $response->json('purchase_units.0.payments.captures.0');
 
-        if (!$response->successful() || $response->json('status') !== 'COMPLETED' || ($capture['status'] ?? null) !== 'COMPLETED') {
+        if (!$response->successful() || !in_array($capture['status'] ?? null, ['COMPLETED', 'PENDING'], true)) {
             throw new RuntimeException('PayPal order was not captured: '.$response->status());
         }
 
         return [
             'capture_id' => $capture['id'],
-            'amount' => $capture['amount']['value'],
+            'status' => $capture['status'],
+            'amount' => (string) $capture['amount']['value'],
             'currency' => strtoupper($capture['amount']['currency_code']),
         ];
+    }
+
+    /**
+     * Refund a capture in full. Used only if a capture turns out not to match the booking.
+     */
+    public function refundCapture(string $captureId): bool
+    {
+        return $this->client()
+            ->withBody('{}', 'application/json')
+            ->post('/v2/payments/captures/'.rawurlencode($captureId).'/refund')
+            ->successful();
     }
 
     private function client(): PendingRequest

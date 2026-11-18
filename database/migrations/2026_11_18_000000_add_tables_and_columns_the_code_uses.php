@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Schema;
  * code, so types are best guesses), guarded so that it only ADDS what is missing and
  * never changes an existing column. On a database that already has them, such as
  * production, it does nothing. It also relaxes NOT NULL on template columns the
- * code never fills, but only for empty tables, i.e. on a fresh install.
+ * code never fills, but only on a fresh install (no users, admins or settings yet).
  *
  * Replace with a real schema dump once one is available:
  *   php artisan schema:dump   (run against production; writes database/schema/mysql-schema.sql)
@@ -398,19 +398,20 @@ return new class extends Migration
 
     /**
      * Template columns the code never sets (e.g. orders.amount_usd) are NOT NULL without a
-     * default, so inserts fail on a fresh install. Make them nullable, keeping their type,
-     * but only on empty tables so an existing database is never altered.
+     * default, so inserts fail on a fresh install. Make them nullable, keeping their type.
+     * Runs only on a fresh install, so an existing database (production) is never altered,
+     * and never touches primary-key columns.
      */
     private function relaxNotNullOnEmptyTables(): void
     {
-        if (DB::getDriverName() !== 'mysql') {
+        if (DB::getDriverName() !== 'mysql' || !$this->isFreshInstall()) {
             return;
         }
 
         $columns = DB::select("SELECT table_name AS t, column_name AS c, column_type AS type
             FROM information_schema.columns
             WHERE table_schema = DATABASE() AND is_nullable = 'NO' AND column_default IS NULL
-              AND extra NOT LIKE '%auto_increment%' AND table_name <> 'migrations'");
+              AND column_key <> 'PRI' AND extra NOT LIKE '%auto_increment%' AND table_name <> 'migrations'");
 
         foreach ($columns as $column) {
             if (DB::table($column->t)->exists()) {
@@ -418,6 +419,18 @@ return new class extends Migration
             }
             DB::statement("ALTER TABLE `{$column->t}` MODIFY `{$column->c}` {$column->type} NULL");
         }
+    }
+
+    /** No users, admins or site settings yet: nothing has ever used this database. */
+    private function isFreshInstall(): bool
+    {
+        foreach (['users', 'admins', 'settings'] as $table) {
+            if (Schema::hasTable($table) && DB::table($table)->exists()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function down(): void
