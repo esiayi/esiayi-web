@@ -192,7 +192,7 @@ class PaymentController extends Controller
         }
 
         $priced = BookingPricing::extras($service, $request->ids, $request->quantities);
-        BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
+        $booking_date = BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
         $totals = BookingPricing::totals($service, $priced->extra_price);
 
         $extras = (object) array(
@@ -203,7 +203,7 @@ class PaymentController extends Controller
             'extra_total' => $totals->extra_price,
             'sub_total' => $totals->package_price,
             'total' => $totals->subtotal,
-            'date' => $request->date,
+            'date' => $booking_date,
             'schedule_time_slot' => $request->schedule_time_slot,
         );
 
@@ -297,7 +297,7 @@ class PaymentController extends Controller
 
             $extra_services = json_decode(html_decode($request->extras));
             $priced = BookingPricing::extras($service, $extra_services->ids ?? [], $extra_services->quantities ?? []);
-            BookingPricing::slot($service, $extra_services->date ?? null, $extra_services->schedule_time_slot ?? null);
+            $booking_date = BookingPricing::slot($service, $extra_services->date ?? null, $extra_services->schedule_time_slot ?? null);
             $totals = BookingPricing::totals($service, $priced->extra_price);
 
             $customer = (object) array(
@@ -317,7 +317,7 @@ class PaymentController extends Controller
                 'extra_total' => $totals->extra_price,
                 'sub_total' => $totals->package_price,
                 'total' => $totals->subtotal,
-                'date' => $extra_services->date,
+                'date' => $booking_date,
                 'schedule_time_slot' => $extra_services->schedule_time_slot,
             ));
 
@@ -331,7 +331,7 @@ class PaymentController extends Controller
                 'extra_price' => $totals->extra_price,
                 'total_price' => $totals->subtotal,
                 'package_price' => $totals->package_price,
-                'date' => $extra_services->date,
+                'date' => $booking_date,
                 'schedule_time_slot' => $extra_services->schedule_time_slot,
             );
 
@@ -350,7 +350,12 @@ class PaymentController extends Controller
         $breadcrumb = BreadcrumbImage::where(['id' => 8])->first();
         $setting = Setting::first();
         $currency_icon = (object) array('icon' => $setting->currency_icon);
-        $totals = BookingPricing::totals($service, $order_info->extra_price, BookingPricing::sessionCoupon($service));
+        $coupon = BookingPricing::sessionCoupon($service);
+        $totals = BookingPricing::totals($service, $order_info->extra_price, $coupon);
+
+        // Freeze the amount shown here; gateways are checked against it and orders record it.
+        $order_info->totals = (array) $totals + ['coupon_code' => $coupon->coupon_code ?? null];
+        Session::put('order_info', $order_info);
 
         $bankPayment = BankPayment::select('id','status','account_info','image')->first();
         $stripe = StripePayment::first();
@@ -412,7 +417,7 @@ class PaymentController extends Controller
      * What the customer must pay for the booking in the session, after any valid coupon.
      */
     private function payableTotal($service, $order_info){
-        return BookingPricing::totals($service, $order_info->extra_price, BookingPricing::sessionCoupon($service))->total;
+        return BookingPricing::frozenTotals($service, $order_info)->total;
     }
 
     private function decodeList($json){
@@ -585,7 +590,8 @@ class PaymentController extends Controller
 
             // The payment id comes from the browser, so check it is for this booking's amount.
             $expected = (int) round(round($this->payableTotal($service, $order_info) * $razorpay->currency_rate, 2) * 100);
-            if(!BookingPricing::amountCovers($payment['amount'], $expected, 1)
+            if(!in_array($payment['status'], ['authorized', 'captured'])
+                || !BookingPricing::amountCovers($payment['amount'], $expected, 1)
                 || strtoupper($payment['currency']) != strtoupper($razorpay->currency_code)
                 || BookingPricing::transactionUsed('Razorpay', $payment['id'])){
                 return redirect()->back()->with($failed);
@@ -593,6 +599,9 @@ class PaymentController extends Controller
 
             if($payment['status'] == 'authorized'){
                 $payment = $payment->capture(array('amount'=>$payment['amount']));
+            }
+            if($payment['status'] != 'captured'){
+                return redirect()->back()->with($failed);
             }
             $payId = $payment['id'];
 
@@ -879,7 +888,7 @@ class PaymentController extends Controller
         $payload = Array(
             'purpose' => env("APP_NAME"),
             'amount' => $price,
-            'phone' => $order_info->customer->phone,
+            'phone' => $this->instamojoPhone($order_info->customer->phone),
             'buyer_name' => $user->name,
             'redirect_url' => route('response-instamojo'),
             'send_email' => true,
@@ -892,8 +901,20 @@ class PaymentController extends Controller
         $response = curl_exec($ch);
         curl_close($ch);
         $response = json_decode($response);
+        if(empty($response->payment_request->longurl)){
+            $notification = array('messege'=>trans('user_validation.Payment Faild'),'alert-type'=>'error');
+            return redirect()->route('payment', $service->slug)->with($notification);
+        }
         Session::put('service', $service);
         return redirect($response->payment_request->longurl);
+    }
+
+    /**
+     * Instamojo rejects badly formatted numbers; send digits only, or nothing.
+     */
+    private function instamojoPhone($phone){
+        $digits = preg_replace('/\D/', '', html_decode((string) $phone));
+        return (strlen($digits) >= 10 && strlen($digits) <= 15) ? $digits : '';
     }
 
     public function instamojoResponse(Request $request){
@@ -1043,8 +1064,8 @@ class PaymentController extends Controller
             $time_slot = strtoupper(date('h:i A', strtotime($find_schedule->start_time))).' - '.strtoupper(date('h:i A', strtotime($find_schedule->end_time)));
         }
 
-        $coupon = BookingPricing::sessionCoupon($service);
-        $totals = BookingPricing::totals($service, $additional_amount, $coupon);
+        $totals = BookingPricing::frozenTotals($service, $order_info);
+        $coupon = !empty($totals->coupon_code) ? Coupon::where('coupon_code', $totals->coupon_code)->first() : null;
         $coupon_discount = $totals->discount;
 
         if($coupon){

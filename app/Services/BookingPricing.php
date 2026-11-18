@@ -66,12 +66,31 @@ class BookingPricing
     }
 
     /**
-     * Check that $scheduleId is an active slot of the service's provider on the weekday of
-     * $date, and that $date is today or later.
+     * The booking date in the one format orders are stored and compared in (d-m-Y),
+     * or null. Only d-m-Y (website) and Y-m-d (app) are accepted.
      */
-    public static function slot(Service $service, $date, $scheduleId): AppointmentSchedule
+    public static function bookingDate($date): ?string
     {
-        $timestamp = $date ? strtotime((string) $date) : false;
+        foreach (['d-m-Y', 'Y-m-d'] as $format) {
+            $parsed = \DateTime::createFromFormat('!'.$format, trim((string) $date));
+            if ($parsed && $parsed->format($format) === trim((string) $date)) {
+                return $parsed->format('d-m-Y');
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Check that $scheduleId is an active, well-formed slot of the service's provider on
+     * the weekday of $date, and that $date is today or later.
+     *
+     * @return string the normalised booking date (d-m-Y)
+     */
+    public static function slot(Service $service, $date, $scheduleId): string
+    {
+        $bookingDate = self::bookingDate($date);
+        $timestamp = $bookingDate ? strtotime($bookingDate) : false;
         if ($timestamp === false || $timestamp < strtotime('today')) {
             throw ValidationException::withMessages(['date' => __('Please choose a booking date from today onwards.')]);
         }
@@ -83,7 +102,7 @@ class BookingPricing
             throw ValidationException::withMessages(['schedule_time_slot' => __('This time slot is not available on the selected date.')]);
         }
 
-        return $schedule;
+        return $bookingDate;
     }
 
     /**
@@ -91,7 +110,7 @@ class BookingPricing
      */
     public static function slotTaken($providerId, $scheduleId, $date): bool
     {
-        return Order::where(['provider_id' => $providerId, 'appointment_schedule_id' => $scheduleId, 'booking_date' => $date])
+        return Order::where(['provider_id' => $providerId, 'appointment_schedule_id' => $scheduleId, 'booking_date' => self::bookingDate($date) ?? $date])
             ->whereNotIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])
             ->exists();
     }
@@ -154,6 +173,20 @@ class BookingPricing
             'discount' => $discount,
             'total' => round($subtotal - $discount, 2),
         ];
+    }
+
+    /**
+     * Totals frozen into the session booking when the payment page was shown, so a price
+     * or coupon change while the customer is at the gateway cannot fail a payment that
+     * was already taken. Falls back to computing them for older sessions.
+     */
+    public static function frozenTotals(Service $service, $orderInfo): object
+    {
+        if (isset($orderInfo->totals)) {
+            return (object) $orderInfo->totals;
+        }
+
+        return self::totals($service, (float) $orderInfo->extra_price, self::sessionCoupon($service));
     }
 
     /**

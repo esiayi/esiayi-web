@@ -149,7 +149,7 @@ class PaypalController extends Controller
         // Add-on prices come from the database; prices sent by the app are ignored.
         $extras = BookingPricing::extras($service, $request->ids, $request->quantities);
         $extra_price = $extras->extra_price;
-        BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
+        $booking_date = BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
 
         $total_price = $service->price + $extra_price;
 
@@ -162,7 +162,8 @@ class PaypalController extends Controller
             'extra_price' => $extra_price,
             'total_price' => $total_price,
             'package_price' => $service->price,
-            'date' => $request->date,
+            'service_id' => $service->id,
+            'date' => $booking_date,
             'schedule_time_slot' => $request->schedule_time_slot,
         );
 
@@ -253,7 +254,7 @@ class PaypalController extends Controller
         $user = Session::get('user');
         $order_info = json_decode(Session::get('order_info'));
 
-        if (!$service || !$user || !$order_info || empty($request->get('PayerID')) || empty($request->get('token')) || empty($request->get('paymentId'))) {
+        if (!$service || !$user || !$order_info || ($order_info->service_id ?? null) != $service->id || empty($request->get('PayerID')) || empty($request->get('token')) || empty($request->get('paymentId'))) {
             return redirect()->route('webview-payment-faild');
         }
 

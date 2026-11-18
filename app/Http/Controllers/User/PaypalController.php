@@ -212,8 +212,7 @@ class PaypalController extends Controller
     }
 
     private function payableAmount($service, $order_info, $paypalSetting){
-        $total = BookingPricing::totals($service, $order_info->extra_price, BookingPricing::sessionCoupon($service))->total;
-        return round($total * $paypalSetting->currency_rate, 2);
+        return round(BookingPricing::frozenTotals($service, $order_info)->total * $paypalSetting->currency_rate, 2);
     }
 
 
@@ -244,8 +243,8 @@ class PaypalController extends Controller
             $time_slot = strtoupper(date('h:i A', strtotime($find_schedule->start_time))).' - '.strtoupper(date('h:i A', strtotime($find_schedule->end_time)));
         }
 
-        $coupon = BookingPricing::sessionCoupon($service);
-        $totals = BookingPricing::totals($service, $additional_amount, $coupon);
+        $totals = BookingPricing::frozenTotals($service, $order_info);
+        $coupon = !empty($totals->coupon_code) ? \App\Models\Coupon::where('coupon_code', $totals->coupon_code)->first() : null;
 
         if($coupon){
             $history = new CouponHistory();

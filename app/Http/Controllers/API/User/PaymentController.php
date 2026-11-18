@@ -105,7 +105,7 @@ class PaymentController extends Controller
         $this->validate($request, $rules);
 
         $day = date('l',strtotime($request->date));
-        $appointment_schedules = AppointmentSchedule::where(['user_id' => $request->provider_id, 'day' => $day])->get();
+        $appointment_schedules = AppointmentSchedule::where(['user_id' => $request->provider_id, 'day' => $day, 'status' => 1])->get();
         // Skip slots saved with an end time before the start time.
         $appointment_schedules = $appointment_schedules->filter(fn ($schedule) => strtotime($schedule->end_time) > strtotime($schedule->start_time));
 
@@ -367,7 +367,10 @@ class PaymentController extends Controller
             // }
 
 
-            $total_price = $service->price + $request->extra_service_price;
+            $extra_price = $request->ids
+                ? BookingPricing::extras($service, $request->ids, $request->quantities)->extra_price
+                : (float) $request->extra_service_price;
+            $total_price = $service->price + $extra_price;
             $total_price = round($total_price,2);
 
             $order_info = (object) array(
@@ -500,7 +503,7 @@ class PaymentController extends Controller
         // Add-on prices come from the database; prices sent by the app are ignored.
         $extras = BookingPricing::extras($service, $request->ids, $request->quantities);
         $extra_price = $extras->extra_price;
-        BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
+        $booking_date = BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
 
         $total_price = $service->price + $extra_price;
 
@@ -513,7 +516,8 @@ class PaymentController extends Controller
             'extra_price' => $extra_price,
             'total_price' => $total_price,
             'package_price' => $service->price,
-            'date' => $request->date,
+            'service_id' => $service->id,
+            'date' => $booking_date,
             'schedule_time_slot' => $request->schedule_time_slot,
         );
 
@@ -616,7 +620,7 @@ class PaymentController extends Controller
         // Add-on prices come from the database; prices sent by the app are ignored.
         $extras = BookingPricing::extras($service, $request->ids, $request->quantities);
         $extra_price = $extras->extra_price;
-        BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
+        $booking_date = BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
 
         $total_price = $service->price + $extra_price;
 
@@ -629,7 +633,8 @@ class PaymentController extends Controller
             'extra_price' => $extra_price,
             'total_price' => $total_price,
             'package_price' => $service->price,
-            'date' => $request->date,
+            'service_id' => $service->id,
+            'date' => $booking_date,
             'schedule_time_slot' => $request->schedule_time_slot,
         );
 
@@ -733,7 +738,7 @@ class PaymentController extends Controller
         $payload = Array(
             'purpose' => env("APP_NAME"),
             'amount' => $price,
-            'phone' => $customer->phone ?? '',
+            'phone' => preg_match('/^\d{10,15}$/', $digits = preg_replace('/\D/', '', html_decode((string) ($customer->phone ?? '')))) ? $digits : '',
             'buyer_name' => Auth::user()->name,
             'redirect_url' => route('response-instamojo'),
             'send_email' => true,
@@ -746,6 +751,9 @@ class PaymentController extends Controller
         $response = curl_exec($ch);
         curl_close($ch);
         $response = json_decode($response);
+        if(empty($response->payment_request->longurl)){
+            return redirect()->route('webview-payment-faild');
+        }
         Session::put('service', $service);
         return redirect($response->payment_request->longurl);
     }
@@ -1002,7 +1010,7 @@ class PaymentController extends Controller
         // Add-on prices come from the database; prices sent by the app are ignored.
         $extras = BookingPricing::extras($service, $request->ids, $request->quantities);
         $extra_price = $extras->extra_price;
-        BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
+        $booking_date = BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
 
         $total_price = $service->price + $extra_price;
 
@@ -1015,7 +1023,8 @@ class PaymentController extends Controller
             'extra_price' => $extra_price,
             'total_price' => $total_price,
             'package_price' => $service->price,
-            'date' => $request->date,
+            'service_id' => $service->id,
+            'date' => $booking_date,
             'schedule_time_slot' => $request->schedule_time_slot,
         );
 
@@ -1081,13 +1090,14 @@ class PaymentController extends Controller
             $service = Service::where(['slug' => $request->slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
             $user = Auth::guard('api')->user();
             $order_info = json_decode(Session::get('order_info'));
-            if(!$service || !$user || !$order_info){
+            if(!$service || !$user || !$order_info || ($order_info->service_id ?? null) != $service->id){
                 return redirect()->route('webview-payment-faild');
             }
 
             $payment = $api->payment->fetch($payId);
             $expected = (int) round(round($order_info->total_price * $razorpay->currency_rate, 2) * 100);
-            if(!BookingPricing::amountCovers($payment['amount'], $expected, 1)
+            if(!in_array($payment['status'], ['authorized', 'captured'])
+                || !BookingPricing::amountCovers($payment['amount'], $expected, 1)
                 || strtoupper($payment['currency']) != strtoupper($razorpay->currency_code)
                 || BookingPricing::transactionUsed('Razorpay', $payId)){
                 return redirect()->route('webview-payment-faild');
@@ -1174,7 +1184,7 @@ class PaymentController extends Controller
         // Add-on prices come from the database; prices sent by the app are ignored.
         $extras = BookingPricing::extras($service, $request->ids, $request->quantities);
         $extra_price = $extras->extra_price;
-        BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
+        $booking_date = BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
 
         $total_price = $service->price + $extra_price;
 
@@ -1187,7 +1197,8 @@ class PaymentController extends Controller
             'extra_price' => $extra_price,
             'total_price' => $total_price,
             'package_price' => $service->price,
-            'date' => $request->date,
+            'service_id' => $service->id,
+            'date' => $booking_date,
             'schedule_time_slot' => $request->schedule_time_slot,
         );
 
@@ -1253,6 +1264,7 @@ class PaymentController extends Controller
 
         // The transaction id comes from the app, so check it is for this booking's amount.
         $paid = $service && $user && $order_info
+            && ($order_info->service_id ?? null) == $service->id
             && ($response->status ?? null) == 'success'
             && ($response->data->status ?? null) == 'successful'
             && BookingPricing::amountCovers($response->data->amount ?? null, round($order_info->total_price * $flutterwave->currency_rate, 2))
@@ -1338,7 +1350,7 @@ class PaymentController extends Controller
         // Add-on prices come from the database; prices sent by the app are ignored.
         $extras = BookingPricing::extras($service, $request->ids, $request->quantities);
         $extra_price = $extras->extra_price;
-        BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
+        $booking_date = BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
 
         $total_price = $service->price + $extra_price;
 
@@ -1351,7 +1363,8 @@ class PaymentController extends Controller
             'extra_price' => $extra_price,
             'total_price' => $total_price,
             'package_price' => $service->price,
-            'date' => $request->date,
+            'service_id' => $service->id,
+            'date' => $booking_date,
             'schedule_time_slot' => $request->schedule_time_slot,
         );
 
@@ -1423,6 +1436,7 @@ class PaymentController extends Controller
         $order_info = json_decode(Session::get('order_info'));
 
         $paid = $service && $user && $order_info
+            && ($order_info->service_id ?? null) == $service->id
             && $payment->isPaid()
             && BookingPricing::amountCovers($payment->amount->value, round($order_info->total_price * $mollie->mollie_currency_rate, 2))
             && !BookingPricing::transactionUsed('Mollie', $payment->id);
@@ -1513,7 +1527,7 @@ class PaymentController extends Controller
         // Add-on prices come from the database; prices sent by the app are ignored.
         $extras = BookingPricing::extras($service, $request->ids, $request->quantities);
         $extra_price = $extras->extra_price;
-        BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
+        $booking_date = BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
 
         $total_price = $service->price + $extra_price;
 
@@ -1526,7 +1540,8 @@ class PaymentController extends Controller
             'extra_price' => $extra_price,
             'total_price' => $total_price,
             'package_price' => $service->price,
-            'date' => $request->date,
+            'service_id' => $service->id,
+            'date' => $booking_date,
             'schedule_time_slot' => $request->schedule_time_slot,
         );
 
@@ -1588,6 +1603,7 @@ class PaymentController extends Controller
         // Paystack amounts are in the minor unit (kobo/cents).
         $transaction = $final_data->data->id ?? null;
         $paid = $service && $user && $order_info
+            && ($order_info->service_id ?? null) == $service->id
             && ($final_data->status ?? false) == true
             && ($final_data->data->status ?? null) == 'success'
             && BookingPricing::amountCovers($final_data->data->amount ?? null, (int) round($order_info->total_price * $paystack->paystack_currency_rate * 100), 1)
@@ -1674,7 +1690,7 @@ class PaymentController extends Controller
         // Add-on prices come from the database; prices sent by the app are ignored.
         $extras = BookingPricing::extras($service, $request->ids, $request->quantities);
         $extra_price = $extras->extra_price;
-        BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
+        $booking_date = BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
 
         $total_price = $service->price + $extra_price;
 
@@ -1687,7 +1703,8 @@ class PaymentController extends Controller
             'extra_price' => $extra_price,
             'total_price' => $total_price,
             'package_price' => $service->price,
-            'date' => $request->date,
+            'service_id' => $service->id,
+            'date' => $booking_date,
             'schedule_time_slot' => $request->schedule_time_slot,
         );
 
@@ -1746,7 +1763,7 @@ class PaymentController extends Controller
         $payload = Array(
             'purpose' => env("APP_NAME"),
             'amount' => $price,
-            'phone' => $customer->phone ?? '',
+            'phone' => preg_match('/^\d{10,15}$/', $digits = preg_replace('/\D/', '', html_decode((string) ($customer->phone ?? '')))) ? $digits : '',
             'buyer_name' => Auth::user()->name,
             'redirect_url' => route('instamojo-response-webview'),
             'send_email' => true,
@@ -1759,6 +1776,9 @@ class PaymentController extends Controller
         $response = curl_exec($ch);
         curl_close($ch);
         $response = json_decode($response);
+        if(empty($response->payment_request->longurl)){
+            return redirect()->route('webview-payment-faild');
+        }
         Session::put('service', $service);
         return redirect($response->payment_request->longurl);
     }
@@ -1801,6 +1821,7 @@ class PaymentController extends Controller
         $order_info = json_decode(Session::get('order_info'));
 
         $paid = $service && $user && $order_info && $data
+            && ($order_info->service_id ?? null) == $service->id
             && ($data->success ?? false) == true
             && ($data->payment->status ?? null) == 'Credit'
             && BookingPricing::amountCovers($data->payment->amount ?? null, round($order_info->total_price * $instamojoPayment->currency_rate, 2))

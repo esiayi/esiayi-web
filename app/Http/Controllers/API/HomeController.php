@@ -1491,7 +1491,7 @@ class HomeController extends Controller
 
         $complete_order = Order::where('order_status','complete')->where('provider_id', $provider->id)->count();
 
-        $canceled_order = Order::where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client')->count();
+        $canceled_order = Order::where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])->count();
 
         $total_review = Review::where(['provider_id' =>  $provider->id, 'status' => 1])->count();
 

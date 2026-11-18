@@ -43,7 +43,7 @@ class ProviderOrderController extends Controller
 
         $complete_booking = Order::where('order_status','complete')->where('provider_id', $provider->id)->count();
 
-        $decliened_booking = Order::where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client')->count();
+        $decliened_booking = Order::where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])->count();
 
 
         return view('provider.order', compact('orders','title','currency_icon','decliened_booking','total_awaiting','active_booking','complete_booking'));
@@ -74,7 +74,7 @@ class ProviderOrderController extends Controller
 
         $complete_booking = Order::where('order_status','complete')->where('provider_id', $provider->id)->count();
 
-        $decliened_booking = Order::where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client')->count();
+        $decliened_booking = Order::where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])->count();
 
         return view('provider.order', compact('orders','title','currency_icon','decliened_booking','total_awaiting','active_booking','complete_booking'));
     }
@@ -104,7 +104,7 @@ class ProviderOrderController extends Controller
 
         $complete_booking = Order::where('order_status','complete')->where('provider_id', $provider->id)->count();
 
-        $decliened_booking = Order::where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client')->count();
+        $decliened_booking = Order::where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])->count();
 
         return view('provider.order', compact('orders','title','currency_icon','decliened_booking','total_awaiting','active_booking','complete_booking'));
     }
@@ -134,7 +134,7 @@ class ProviderOrderController extends Controller
 
         $complete_booking = Order::where('order_status','complete')->where('provider_id', $provider->id)->count();
 
-        $decliened_booking = Order::where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client')->count();
+        $decliened_booking = Order::where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])->count();
 
         return view('provider.order', compact('orders','title','currency_icon','decliened_booking','total_awaiting','active_booking','complete_booking'));
     }
@@ -142,7 +142,7 @@ class ProviderOrderController extends Controller
     public function declineBooking(Request $request){
         Paginator::useBootstrap();
         $provider = Auth::guard('web')->user();
-        $orders = Order::with('client','service')->orderBy('id','desc')->where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client');
+        $orders = Order::with('client','service')->orderBy('id','desc')->where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client']);
 
         if($request->booking_id){
             $orders = $orders->where('order_id', $request->booking_id);
@@ -164,7 +164,7 @@ class ProviderOrderController extends Controller
 
         $complete_booking = Order::where('order_status','complete')->where('provider_id', $provider->id)->count();
 
-        $decliened_booking = Order::where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client')->count();
+        $decliened_booking = Order::where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])->count();
 
         return view('provider.order', compact('orders','title','currency_icon','decliened_booking','total_awaiting','active_booking','complete_booking'));
     }
@@ -259,7 +259,7 @@ class ProviderOrderController extends Controller
 
         $complete_booking = Order::where('order_status','complete')->where('provider_id', $provider->id)->count();
 
-        $decliened_booking = Order::where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client')->count();
+        $decliened_booking = Order::where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])->count();
 
         return view('provider.order', compact('orders','title','currency_icon','decliened_booking','total_awaiting','active_booking','complete_booking'));
     }
