@@ -19,6 +19,16 @@ class ContactPageController extends Controller
         return view('admin.contact_page', compact('contact'));
     }
 
+    public function store(Request $request){
+        // Shown only when no contact page exists yet (fresh install); create it, then reuse update().
+        $contact = ContactPage::first() ?? new ContactPage();
+        if(!$contact->exists){
+            $contact->save();
+        }
+
+        return $this->update($request, $contact->id);
+    }
+
     public function update(Request $request, $id){
         $rules = [
             'email' => 'required',

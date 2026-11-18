@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
@@ -61,7 +61,6 @@ use App\Models\RazorpayPayment;
 use App\Models\Flutterwave;
 use App\Models\PaystackAndMollie;
 use App\Models\InstamojoPayment;
-use App\Models\PaymongoPayment;
 use App\Models\BankPayment;
 
 class HomeController extends Controller

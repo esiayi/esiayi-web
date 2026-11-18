@@ -32,7 +32,7 @@ class WithdrawController extends Controller
     }
 
     public function show($id){
-        $withdraw = ProviderWithdraw::find($id);
+        $withdraw = ProviderWithdraw::where(['id' => $id, 'user_id' => Auth::guard('api')->user()->id])->firstOrFail();
         $setting = Setting::first();
         $currency_icon = array(
             'icon' => $setting->currency_icon
@@ -66,7 +66,7 @@ class WithdrawController extends Controller
     public function store(Request $request){
         $rules = [
             'method_id' => 'required',
-            'withdraw_amount' => 'required|numeric',
+            'withdraw_amount' => 'required|numeric|gt:0',
             'account_info' => 'required',
         ];
 
@@ -82,7 +82,8 @@ class WithdrawController extends Controller
         $user = Auth::guard('api')->user();
 
         $provider = $user;
-        $orders = Order::where('provider_id', $provider->id)->where('order_status', 'complete')->get();
+        // Only completed bookings that were actually paid count towards the withdrawable balance.
+        $orders = Order::where('provider_id', $provider->id)->where('order_status', 'complete')->where('payment_status', 'success')->get();
         $total_sold_service = $orders->count();
         $total_balance = $orders->sum('total_amount');
         $total_withdraw = ProviderWithdraw::where('user_id', $provider->id)->sum('total_amount');

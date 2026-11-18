@@ -76,11 +76,6 @@ Route::group(['middleware' => ['demo','XSS']], function () {
         Route::post('/bank-payment/{slug}', [PaymentController::class, 'bankPayment'])->name('bank-payment');
         Route::post('/pay-with-stripe/{slug}', [PaymentController::class, 'payWithStripe'])->name('pay-with-stripe');
 
-        Route::post('/pay-with-razorpay/{slug}', [PaymentController::class, 'payWithRazorpay'])->name('pay-with-razorpay');
-        Route::post('/pay-with-flutterwave/{slug}', [PaymentController::class, 'payWithFlutterwave'])->name('pay-with-flutterwave');
-        Route::get('/pay-with-mollie/{slug}', [PaymentController::class, 'payWithMollie'])->name('pay-with-mollie');
-        Route::get('/mollie-payment-success', [PaymentController::class, 'molliePaymentSuccess'])->name('mollie-payment-success');
-        Route::get('/pay-with-paystack/{slug}', [PaymentController::class, 'payWithPayStack'])->name('pay-with-paystack');
         Route::get('/pay-with-instamojo/{slug}', [PaymentController::class, 'payWithInstamojo'])->name('pay-with-instamojo');
         Route::get('/response-instamojo', [PaymentController::class, 'instamojoResponse'])->name('response-instamojo');
 
@@ -127,10 +122,10 @@ Route::group(['middleware' => ['demo','XSS']], function () {
             Route::put('password-update',[ProviderProfileController::class,'updatePassword'])->name('password-update');
             Route::post('update-provider-profile',[ProviderProfileController::class,'updateSellerProfile'])->name('update-provider-profile');
 
-            Route::resource('my-withdraw', WithdrawController::class);
+            Route::resource('my-withdraw', WithdrawController::class)->only(['index', 'create', 'store', 'show']);
             Route::get('get-withdraw-account-info/{id}', [WithdrawController::class, 'getWithDrawAccountInfo'])->name('get-withdraw-account-info');
 
-            Route::resource('service', ServiceController::class);
+            Route::resource('service', ServiceController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
             Route::get('review-list', [ServiceController::class, 'reviewList'])->name('review-list');
             Route::get('show-review/{id}', [ServiceController::class, 'showReview'])->name('show-review');
             Route::get('awaiting-for-approval-service', [ServiceController::class, 'awaitingForApproval'])->name('awaiting-for-approval-service');
@@ -140,7 +135,7 @@ Route::group(['middleware' => ['demo','XSS']], function () {
             Route::get('schedule',[ProviderProfileController::class,'schedule'])->name('schedule');
             Route::put('update-schedule',[ProviderProfileController::class,'updateSchedule'])->name('update-schedule');
 
-            Route::resource('appointment-schedule',AppointmentScheduleController::class);
+            Route::resource('appointment-schedule', AppointmentScheduleController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
 
             Route::get('ticket', [ProviderTicketController::class, 'index'])->name('ticket');
             Route::get('ticket-show/{id}', [ProviderTicketController::class, 'show'])->name('ticket-show');

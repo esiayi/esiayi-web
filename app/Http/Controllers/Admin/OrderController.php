@@ -313,7 +313,11 @@ class OrderController extends Controller
 
 
     public function bookingCompleteRequest($id){
-        $order = Order::find($id);
+        $order = Order::findOrFail($id);
+        if($order->payment_status != 'success'){
+            $notification = array('messege'=>__('Approve the payment before marking this booking as complete.'),'alert-type'=>'error');
+            return redirect()->back()->with($notification);
+        }
         $order->order_status = 'complete';
         $order->complete_by_admin = 'Yes';
         $order->save();

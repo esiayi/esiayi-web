@@ -47,38 +47,39 @@
                             <li>3 <span>{{__('user.Confirmation')}}</span></li>
                         </ul>
                         <div class="wsus__review_input mt_30 p-0 border-0">
-                            <form id="customer_info_form" action="{{ route('payment', $service->slug) }}">
+                            <form id="customer_info_form" method="POST" action="{{ route('payment', $service->slug) }}">
+                                @csrf
                                 <h3>{{__('user.Booking Information')}}</h3>
 
                                 <div class="row">
                                     <div class="col-xl-6">
                                         <fieldset>
                                             <legend>{{__('user.Name')}}*</legend>
-                                            <input type="text" name="name">
+                                            <input type="text" name="name" value="{{ old('name', html_decode($user->name ?? '')) }}" autocomplete="name">
                                         </fieldset>
                                     </div>
                                     <div class="col-xl-6">
                                         <fieldset>
                                             <legend>{{__('user.email')}}</legend>
-                                            <input type="text" name="email">
+                                            <input type="email" name="email" value="{{ old('email', $user->email ?? '') }}" autocomplete="email">
                                         </fieldset>
                                     </div>
                                     <div class="col-xl-6">
                                         <fieldset>
                                             <legend>{{__('user.Phone')}}*</legend>
-                                            <input type="text" name="phone">
+                                            <input type="tel" name="phone" value="{{ old('phone', html_decode($user->phone ?? '')) }}" autocomplete="tel">
                                         </fieldset>
                                     </div>
                                     <div class="col-xl-6">
                                         <fieldset>
                                             <legend>{{__('user.post code')}}</legend>
-                                            <input type="text" name="post_code">
+                                            <input type="text" name="post_code" value="{{ old('post_code', html_decode($user->post_code ?? '')) }}" autocomplete="postal-code">
                                         </fieldset>
                                     </div>
                                     <div class="col-xl-12">
                                         <fieldset>
                                             <legend>{{__('user.your address')}}*</legend>
-                                            <input type="text" name="address">
+                                            <input type="text" name="address" value="{{ old('address', html_decode($user->address ?? '')) }}" autocomplete="street-address">
                                         </fieldset>
                                     </div>
                                     <div class="col-xl-12">

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\User;
+namespace App\Http\Controllers\API\User;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -25,6 +25,8 @@ use App\Models\Service;
 use App\Models\AdditionalService;
 use App\Models\Order;
 use App\Models\Setting;
+use App\Models\AppointmentSchedule;
+use App\Services\BookingPricing;
 
 use Str;
 use Cart;
@@ -60,6 +62,9 @@ class PaypalController extends Controller
     public function check_schedule_during_payment($slug){
         $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
         $order_info = Session::get('order_info');
+        if(!$service || !is_object($order_info)){
+            return response()->json(['is_available' => false, 'message' => trans('user_validation.Please select a schedule')]);
+        }
 
         $exist = $this->checkAvaibalityBeforPayment($service, $order_info->date, $order_info->schedule_time_slot);
 
@@ -72,7 +77,7 @@ class PaypalController extends Controller
 
     }
     public function checkAvaibalityBeforPayment($service, $date, $schedule_id){
-        $exist = Order::where(['provider_id' => $service->provider_id, 'appointment_schedule_id' => $schedule_id, 'booking_date' => $date])->count();
+        $exist = BookingPricing::slotTaken($service->provider_id, $schedule_id, $date);
         return $exist;
     }
 
@@ -113,6 +118,9 @@ class PaypalController extends Controller
         );
 
         $service = Service::where(['slug' => $request->slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
+        if(!$service){
+            return redirect()->route('webview-payment-faild');
+        }
 
         $what_you_will_get = array();
         if($service->what_you_will_provide){
@@ -138,21 +146,10 @@ class PaypalController extends Controller
             }
         }
 
-        $extra_price = 0;
-        if($request->ids){
-            foreach($request->ids as $index => $extra_service){
-                if($request->ids[$index] && $request->prices[$index] && $request->quantities[$index] && $request->names[$index]){
-                    $extra_price += ($request->quantities[$index] * $request->prices[$index]);
-                }
-            }
-        }
-
-        $extras = (object) array(
-            'ids' => $request->ids,
-            'prices' => $request->prices,
-            'quantities' => $request->quantities,
-            'names' => $request->names,
-        );
+        // Add-on prices come from the database; prices sent by the app are ignored.
+        $extras = BookingPricing::extras($service, $request->ids, $request->quantities);
+        $extra_price = $extras->extra_price;
+        BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
 
         $total_price = $service->price + $extra_price;
 
@@ -251,44 +248,60 @@ class PaypalController extends Controller
 
     public function paypalPaymentSuccess(Request $request){
 
-        $service = Session::get('service');
+        $session_service = Session::get('service');
+        $service = $session_service ? Service::where(['slug' => $session_service->slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first() : null;
+        $user = Session::get('user');
+        $order_info = json_decode(Session::get('order_info'));
 
-        if (empty($request->get('PayerID')) || empty($request->get('token'))) {
+        if (!$service || !$user || !$order_info || empty($request->get('PayerID')) || empty($request->get('token')) || empty($request->get('paymentId'))) {
             return redirect()->route('webview-payment-faild');
         }
 
         $payment_id=$request->get('paymentId');
-        $payment = Payment::get($payment_id, $this->apiContext);
-        $execution = new PaymentExecution();
-        $execution->setPayerId($request->get('PayerID'));
-        /**Execute the payment **/
-        $result = $payment->execute($execution, $this->apiContext);
-
-        if ($result->getState() == 'approved') {
-
-
-            $service = Service::where(['slug' => $service->slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
-            $user = Session::get('user');
-            $order_info = Session::get('order_info');
-            $order_info = json_decode($order_info);
-            $provider_id = $service->provider_id;
-            $client_id = $user->id;
-
-            $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Paypal', 'success', $payment_id);
-
-            $provider = $service->provider;
-            $this->sendMailToClient($user, $order);
-            $this->sendMailToProvider($provider, $order);
-
-            Session::forget('order_info');
-            Session::forget('slug');
-            Session::forget('request_from');
-            Session::forget('user');
-            Session::forget('frontend_success_url');
-            Session::forget('frontend_faild_url');
-
-            return redirect()->route('webview-payment-success');
+        if(BookingPricing::transactionUsed('Paypal', $payment_id)){
+            return redirect()->route('webview-payment-faild');
         }
+
+        try {
+            $payment = Payment::get($payment_id, $this->apiContext);
+
+            // Only execute a payment that was created for this booking's amount.
+            $paypalSetting = PaypalPayment::first();
+            $transactions = $payment->getTransactions();
+            $paid_amount = $transactions ? $transactions[0]->getAmount()->getTotal() : null;
+            if(!BookingPricing::amountCovers($paid_amount, round($order_info->total_price * $paypalSetting->currency_rate, 2))){
+                return redirect()->route('webview-payment-faild');
+            }
+
+            $execution = new PaymentExecution();
+            $execution->setPayerId($request->get('PayerID'));
+            /**Execute the payment **/
+            $result = $payment->execute($execution, $this->apiContext);
+        } catch (\Exception $ex) {
+            return redirect()->route('webview-payment-faild');
+        }
+
+        if ($result->getState() != 'approved') {
+            return redirect()->route('webview-payment-faild');
+        }
+
+        $provider_id = $service->provider_id;
+        $client_id = $user->id;
+
+        $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Paypal', 'success', $payment_id);
+
+        $provider = $service->provider;
+        $this->sendMailToClient($user, $order);
+        $this->sendMailToProvider($provider, $order);
+
+        Session::forget('order_info');
+        Session::forget('slug');
+        Session::forget('request_from');
+        Session::forget('user');
+        Session::forget('frontend_success_url');
+        Session::forget('frontend_faild_url');
+
+        return redirect()->route('webview-payment-success');
     }
 
     public function paypalPaymentCancled(){
@@ -310,11 +323,10 @@ class PaypalController extends Controller
         $additional_services = array();
         if($extra_services->ids){
             foreach($extra_services->ids as $index => $extra_service){
-                $addition = AdditionalService::find($extra_services->ids[$index]);
                 $single_extra_service = array(
                     'service_name' => $extra_services->names[$index],
                     'qty' => $extra_services->quantities[$index],
-                    'price' => ($extra_services->quantities[$index] * $addition->price),
+                    'price' => $extra_services->prices[$index],
                 );
                 $additional_services[] = $single_extra_service;
             }
@@ -325,9 +337,17 @@ class PaypalController extends Controller
         $order_note = $order_info->customer->order_note;
         $client_address = $order_info->customer;
 
+        $find_schedule = AppointmentSchedule::find($order_info->schedule_time_slot);
+        $time_slot = '';
+        if($find_schedule){
+            $time_slot = strtoupper(date('h:i A', strtotime($find_schedule->start_time))).' - '.strtoupper(date('h:i A', strtotime($find_schedule->end_time)));
+        }
+
         $order = new Order();
         $order->order_id = substr(rand(0,time()),0,10);
         $order->booking_date = $order_info->date;
+        $order->appointment_schedule_id = $order_info->schedule_time_slot;
+        $order->schedule_time_slot = $time_slot;
         $order->client_id = $client_id;
         $order->provider_id = $provider_id;
         $order->service_id = $service->id;

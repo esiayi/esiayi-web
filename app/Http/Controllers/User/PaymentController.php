@@ -16,7 +16,6 @@ use App\Models\RazorpayPayment;
 use App\Models\Flutterwave;
 use App\Models\PaystackAndMollie;
 use App\Models\InstamojoPayment;
-use App\Models\PaymongoPayment;
 use App\Models\BankPayment;
 use App\Models\AppointmentSchedule;
 
@@ -41,6 +40,7 @@ use App\Models\Schedule;
 use App\Models\Coupon;
 use App\Models\CouponHistory;
 use Auth;
+use App\Services\BookingPricing;
 
 class PaymentController extends Controller
 {
@@ -50,6 +50,14 @@ class PaymentController extends Controller
     }
 
     public function apply_coupon(Request $request){
+
+        $order_info = Session::get('order_info');
+        $service = is_object($order_info) ? Service::find($order_info->service_id ?? null) : null;
+        if(!$service){
+            $notification = trans('user_validation.Invalid coupon');
+            $notification = array('messege'=>$notification,'alert-type'=>'error');
+            return redirect()->back()->with($notification);
+        }
 
         $coupon = Coupon::where(['coupon_code' => $request->coupon, 'status' => 1])->first();
 
@@ -65,12 +73,11 @@ class PaymentController extends Controller
             return redirect()->back()->with($notification);
         }
 
-        if($coupon->provider_id != 0){
-            if($coupon->provider_id != $request->provider_id){
-                $notification = trans('user_validation.You can not apply another provider coupon');
-                $notification = array('messege'=>$notification,'alert-type'=>'error');
-                return redirect()->back()->with($notification);
-            }
+        // The provider comes from the booking being paid for, never from the request.
+        if(!BookingPricing::validCoupon($service, $coupon->coupon_code)){
+            $notification = trans('user_validation.You can not apply another provider coupon');
+            $notification = array('messege'=>$notification,'alert-type'=>'error');
+            return redirect()->back()->with($notification);
         }
 
         Session::put('coupon_code', $coupon->coupon_code);
@@ -116,6 +123,7 @@ class PaymentController extends Controller
         }
 
         $additional_services = AdditionalService::where('service_id', $service->id)->get();
+        $available_days = AppointmentSchedule::where(['user_id' => $service->provider_id, 'status' => 1])->distinct()->pluck('day');
 
         $setting = Setting::first();
         $currency_icon = (object) array('icon' => $setting->currency_icon);
@@ -138,18 +146,26 @@ class PaymentController extends Controller
             'package_features' => $package_features,
             'benifits' => $benifits,
             'additional_services' => $additional_services,
+            'available_days' => $available_days,
             'currency_icon' => $currency_icon,
             'what_you_will_get' => $what_you_will_get,
         ]);
     }
 
     public function get_available_schedule(Request $request){
-        $day = date('l',strtotime($request->date));
-        $appointment_schedules = AppointmentSchedule::where(['user_id' => $request->provider_id, 'day' => $day])->get();
+        $html = "<option value=''>".trans('user_validation.Select')."</option>";
+
+        $timestamp = $request->date ? strtotime($request->date) : false;
+        if($timestamp === false || $timestamp < strtotime('today')){
+            return response()->json(['is_available' => false, 'available_schedules' => $html]);
+        }
+
+        $day = date('l', $timestamp);
+        $appointment_schedules = AppointmentSchedule::where(['user_id' => $request->provider_id, 'day' => $day, 'status' => 1])->get();
 
         $available_schedule_arr = array();
         foreach($appointment_schedules as $appointment_schedule){
-            $exist = Order::where(['provider_id' => $request->provider_id, 'appointment_schedule_id' => $appointment_schedule->id, 'booking_date' => $request->date])->count();
+            $exist = BookingPricing::slotTaken($request->provider_id, $appointment_schedule->id, $request->date);
             if($exist == 0){
                 $available_schedule_arr[] = $appointment_schedule->id;
             }
@@ -158,7 +174,6 @@ class PaymentController extends Controller
         $available_schedules = AppointmentSchedule::whereIn('id', $available_schedule_arr)->orderBy('start_time','asc')->get();
 
         $is_available = $available_schedules->count() > 0 ? true : false;
-        $html = "<option value=''>".trans('user_validation.Select')."</option>";
         foreach($available_schedules as $index=> $schedule){
             $html.='<option value="'.$schedule->id.'">'.strtoupper(date('h:i A', strtotime($schedule->start_time))).' - '.strtoupper(date('h:i A', strtotime($schedule->end_time))).'</option>';
         }
@@ -167,26 +182,28 @@ class PaymentController extends Controller
     }
 
     public function booking_information(Request $request, $slug){
-        $extras = (object) array(
-            'ids' => $request->ids,
-            'prices' => $request->prices,
-            'quantities' => $request->quantities,
-            'names' => $request->names,
-            'extra_total' => $request->extra_total,
-            'sub_total' => $request->sub_total,
-            'total' => $request->total,
-            'date' => $request->date,
-            'schedule_time_slot' => $request->schedule_time_slot,
-        );
-
         $breadcrumb = BreadcrumbImage::where(['id' => 8])->first();
-        $service = Service::with('category','provider')->where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
-
         $service = Service::with('category','provider')->where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
 
         if(!$service){
             abort(404);
         }
+
+        $priced = BookingPricing::extras($service, $request->ids, $request->quantities);
+        BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
+        $totals = BookingPricing::totals($service, $priced->extra_price);
+
+        $extras = (object) array(
+            'ids' => $priced->ids,
+            'prices' => $priced->prices,
+            'quantities' => $priced->quantities,
+            'names' => $priced->names,
+            'extra_total' => $totals->extra_price,
+            'sub_total' => $totals->package_price,
+            'total' => $totals->subtotal,
+            'date' => $request->date,
+            'schedule_time_slot' => $request->schedule_time_slot,
+        );
 
         $what_you_will_get = array();
         if($service->what_you_will_provide){
@@ -236,6 +253,7 @@ class PaymentController extends Controller
             'extra_services' => $extras,
             'extras' => json_encode($extras),
             'currency_icon' => $currency_icon,
+            'user' => Auth::guard('web')->user(),
         ]);
     }
 
@@ -248,122 +266,23 @@ class PaymentController extends Controller
             return redirect()->back()->with($notification);
         }
 
+        $service = Service::with('category','provider')->where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
+        if(!$service){
+            abort(404);
+        }
 
-
-        if(Session::has('return_from_mollie')){
-            $breadcrumb = BreadcrumbImage::where(['id' => 8])->first();
-            $service = Service::with('category','provider')->where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
-
-            if(!$service){
-                abort(404);
-            }
-
-            $what_you_will_get = array();
-            if($service->what_you_will_provide){
-                $provides = json_decode($service->what_you_will_provide);
-                foreach($provides as $provide){
-                    $what_you_will_get [] = $provide;
-                }
-            }
-
-            $benifits = array();
-            if($service->benifit){
-                $exist_benifits = json_decode($service->benifit);
-                foreach($exist_benifits as $exist_benifit){
-                    $benifits [] = $exist_benifit;
-                }
-            }
-
-            $package_features = array();
-            if($service->package_features){
-                $features = json_decode($service->package_features);
-                foreach($features as $feature){
-                    $package_features [] = $feature;
-                }
-            }
-
-            $setting = Setting::first();
-            $currency_icon = (object) array('icon' => $setting->currency_icon);
-
-            $order_info = Session::get('order_info');
-            $customer = $order_info->customer;
-
-            $extras = $order_info->extras;
-            $extra_services = json_decode($extras);
-
-            $extra_price = 0;
-            if($extra_services->ids){
-                foreach($extra_services->ids as $index => $extra_service){
-                    $addition = AdditionalService::find($extra_services->ids[$index]);
-                    $extra_price += ($extra_services->quantities[$index] * $addition->price);
-                }
-            }
-
-
-            $total_price = $service->price + $extra_price;
-            $total_price = round($total_price,2);
-
-            $order_info = (object) array(
-                'customer' => $customer,
-                'extras' => $extras,
-                'what_you_will_get' => $what_you_will_get,
-                'benifits' => $benifits,
-                'package_features' => $package_features,
-                'extra_price' => $extra_price,
-                'total_price' => $total_price,
-                'package_price' => $service->price,
-                'date' => $extra_services->date,
-                'schedule_time_slot' => $extra_services->schedule_time_slot,
-            );
-
-            $user = Auth::guard('web')->user();
-            $bankPayment = BankPayment::select('id','status','account_info','image')->first();
-            $stripe = StripePayment::first();
-            $paypal = PaypalPayment::first();
-            $razorpay = RazorpayPayment::first();
-            $flutterwave = Flutterwave::first();
-            $mollie = PaystackAndMollie::first();
-            $paystack = $mollie;
-            $instamojoPayment = InstamojoPayment::first();
-
-            $selected_theme = Session::get('selected_theme');
-            if ($selected_theme == 'theme_one'){
-                $active_theme = 'layout';
-            }elseif($selected_theme == 'theme_two'){
-                $active_theme = 'layout2';
-            }elseif($selected_theme == 'theme_three'){
-                $active_theme = 'layout3';
-            }else{
-                $active_theme = 'layout';
-            }
-
-            return view('payment')->with([
-                'active_theme' => $active_theme,
-                'breadcrumb' => $breadcrumb,
-                'service' => $service,
-                'customer' => $customer,
-                'package_features' => $package_features,
-                'benifits' => $benifits,
-                'what_you_will_get' => $what_you_will_get,
-                'extra_services' => $extra_services,
-                'currency_icon' => $currency_icon,
-                'bankPayment' => $bankPayment,
-                'stripe' => $stripe,
-                'paypal' => $paypal,
-                'razorpay' => $razorpay,
-                'total_price' => $total_price,
-                'flutterwave' => $flutterwave,
-                'user' => $user,
-                'mollie' => $mollie,
-                'instamojoPayment' => $instamojoPayment,
-                'paystack' => $paystack,
-            ]);
-        }else{
+        // Customer details arrive by POST (so they never end up in URLs, logs or analytics),
+        // get priced and validated once, then the page is shown from the session.
+        if($request->isMethod('post')){
             $rules = [
-                'name'=>'required',
-                'phone'=>'required',
-                'address'=>'required',
+                'name'=>'required|max:255',
+                'email'=>'nullable|email|max:255',
+                'phone'=>'required|max:30',
+                'address'=>'required|max:500',
+                'post_code'=>'nullable|max:20',
+                'order_note'=>'nullable|max:2000',
                 'agree_with'=>'required',
+                'extras'=>'required',
             ];
             $customMessages = [
                 'name.required' => trans('user_validation.Name is required'),
@@ -374,39 +293,10 @@ class PaymentController extends Controller
             ];
             $this->validate($request, $rules,$customMessages);
 
-            $breadcrumb = BreadcrumbImage::where(['id' => 8])->first();
-            $service = Service::with('category','provider')->where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
-
-            if(!$service){
-                abort(404);
-            }
-
-            $what_you_will_get = array();
-            if($service->what_you_will_provide){
-                $provides = json_decode($service->what_you_will_provide);
-                foreach($provides as $provide){
-                    $what_you_will_get [] = $provide;
-                }
-            }
-
-            $benifits = array();
-            if($service->benifit){
-                $exist_benifits = json_decode($service->benifit);
-                foreach($exist_benifits as $exist_benifit){
-                    $benifits [] = $exist_benifit;
-                }
-            }
-
-            $package_features = array();
-            if($service->package_features){
-                $features = json_decode($service->package_features);
-                foreach($features as $feature){
-                    $package_features [] = $feature;
-                }
-            }
-
-            $setting = Setting::first();
-            $currency_icon = (object) array('icon' => $setting->currency_icon);
+            $extra_services = json_decode(html_decode($request->extras));
+            $priced = BookingPricing::extras($service, $extra_services->ids ?? [], $extra_services->quantities ?? []);
+            BookingPricing::slot($service, $extra_services->date ?? null, $extra_services->schedule_time_slot ?? null);
+            $totals = BookingPricing::totals($service, $priced->extra_price);
 
             $customer = (object) array(
                 'name' => $request->name,
@@ -417,86 +307,131 @@ class PaymentController extends Controller
                 'order_note' => $request->order_note,
             );
 
-            $extras = html_decode($request->extras);
-            $extra_services = json_decode($extras);
-
-            $extra_price = 0;
-            if($extra_services->ids){
-                foreach($extra_services->ids as $index => $extra_service){
-                    $addition = AdditionalService::find($extra_services->ids[$index]);
-                    $extra_price += ($extra_services->quantities[$index] * $addition->price);
-                }
-            }
-
-            $total_price = $service->price + $extra_price;
-            $total_price = round($total_price,2);
+            $extras = json_encode(array(
+                'ids' => $priced->ids,
+                'prices' => $priced->prices,
+                'quantities' => $priced->quantities,
+                'names' => $priced->names,
+                'extra_total' => $totals->extra_price,
+                'sub_total' => $totals->package_price,
+                'total' => $totals->subtotal,
+                'date' => $extra_services->date,
+                'schedule_time_slot' => $extra_services->schedule_time_slot,
+            ));
 
             $order_info = (object) array(
+                'service_id' => $service->id,
                 'customer' => $customer,
                 'extras' => $extras,
-                'what_you_will_get' => $what_you_will_get,
-                'benifits' => $benifits,
-                'package_features' => $package_features,
-                'extra_price' => $extra_price,
-                'total_price' => $total_price,
-                'package_price' => $service->price,
+                'what_you_will_get' => $this->decodeList($service->what_you_will_provide),
+                'benifits' => $this->decodeList($service->benifit),
+                'package_features' => $this->decodeList($service->package_features),
+                'extra_price' => $totals->extra_price,
+                'total_price' => $totals->subtotal,
+                'package_price' => $totals->package_price,
                 'date' => $extra_services->date,
                 'schedule_time_slot' => $extra_services->schedule_time_slot,
             );
 
-
-
             Session::put('order_info', $order_info);
-            $user = Auth::guard('web')->user();
-            $bankPayment = BankPayment::select('id','status','account_info','image')->first();
-            $stripe = StripePayment::first();
-            $paypal = PaypalPayment::first();
-            $razorpay = RazorpayPayment::first();
-            $flutterwave = Flutterwave::first();
-            $mollie = PaystackAndMollie::first();
-            $paystack = $mollie;
-            $instamojoPayment = InstamojoPayment::first();
 
-            $selected_theme = Session::get('selected_theme');
-            if ($selected_theme == 'theme_one'){
-                $active_theme = 'layout';
-            }elseif($selected_theme == 'theme_two'){
-                $active_theme = 'layout2';
-            }elseif($selected_theme == 'theme_three'){
-                $active_theme = 'layout3';
-            }else{
-                $active_theme = 'layout';
-            }
-
-            return view('payment')->with([
-                'active_theme' => $active_theme,
-                'breadcrumb' => $breadcrumb,
-                'service' => $service,
-                'customer' => $customer,
-                'package_features' => $package_features,
-                'benifits' => $benifits,
-                'what_you_will_get' => $what_you_will_get,
-                'extra_services' => $extra_services,
-                'currency_icon' => $currency_icon,
-                'bankPayment' => $bankPayment,
-                'stripe' => $stripe,
-                'paypal' => $paypal,
-                'razorpay' => $razorpay,
-                'total_price' => $total_price,
-                'flutterwave' => $flutterwave,
-                'user' => $user,
-                'mollie' => $mollie,
-                'paystack' => $paystack,
-                'instamojoPayment' => $instamojoPayment,
-            ]);
+            return redirect()->route('payment', $service->slug);
         }
 
+        $order_info = $this->sessionOrder($service);
+        if(!$order_info){
+            $notification = trans('user_validation.Please select a schedule');
+            $notification = array('messege'=>$notification,'alert-type'=>'error');
+            return redirect()->route('ready-to-booking', $service->slug)->with($notification);
+        }
+
+        $breadcrumb = BreadcrumbImage::where(['id' => 8])->first();
+        $setting = Setting::first();
+        $currency_icon = (object) array('icon' => $setting->currency_icon);
+        $totals = BookingPricing::totals($service, $order_info->extra_price, BookingPricing::sessionCoupon($service));
+
+        $bankPayment = BankPayment::select('id','status','account_info','image')->first();
+        $stripe = StripePayment::first();
+        $paypal = PaypalPayment::first();
+        $razorpay = RazorpayPayment::first();
+        $flutterwave = Flutterwave::first();
+        $mollie = PaystackAndMollie::first();
+        $paystack = $mollie;
+        $instamojoPayment = InstamojoPayment::first();
+
+        $selected_theme = Session::get('selected_theme');
+        if ($selected_theme == 'theme_one'){
+            $active_theme = 'layout';
+        }elseif($selected_theme == 'theme_two'){
+            $active_theme = 'layout2';
+        }elseif($selected_theme == 'theme_three'){
+            $active_theme = 'layout3';
+        }else{
+            $active_theme = 'layout';
+        }
+
+        return view('payment')->with([
+            'active_theme' => $active_theme,
+            'breadcrumb' => $breadcrumb,
+            'service' => $service,
+            'customer' => $order_info->customer,
+            'package_features' => $order_info->package_features,
+            'benifits' => $order_info->benifits,
+            'what_you_will_get' => $order_info->what_you_will_get,
+            'extra_services' => json_decode($order_info->extras),
+            'currency_icon' => $currency_icon,
+            'bankPayment' => $bankPayment,
+            'stripe' => $stripe,
+            'paypal' => $paypal,
+            'razorpay' => $razorpay,
+            'total_price' => $totals->subtotal,
+            'coupon_discount' => $totals->discount,
+            'flutterwave' => $flutterwave,
+            'user' => $user,
+            'mollie' => $mollie,
+            'paystack' => $paystack,
+            'instamojoPayment' => $instamojoPayment,
+        ]);
+    }
+
+    /**
+     * The booking prepared by payment() for this service, if there is one in the session.
+     */
+    private function sessionOrder($service){
+        $order_info = Session::get('order_info');
+        if(!is_object($order_info) || ($order_info->service_id ?? null) != $service->id){
+            return null;
+        }
+
+        return $order_info;
+    }
+
+    /**
+     * What the customer must pay for the booking in the session, after any valid coupon.
+     */
+    private function payableTotal($service, $order_info){
+        return BookingPricing::totals($service, $order_info->extra_price, BookingPricing::sessionCoupon($service))->total;
+    }
+
+    private function decodeList($json){
+        $items = $json ? json_decode($json) : [];
+        return is_array($items) ? $items : [];
+    }
+
+    private function missingBooking($service){
+        $notification = trans('user_validation.Please select a schedule');
+        $notification = array('messege'=>$notification,'alert-type'=>'error');
+        return redirect()->route('ready-to-booking', $service->slug)->with($notification);
     }
 
 
     public function check_schedule_during_payment($slug){
         $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
-        $order_info = Session::get('order_info');
+        $order_info = $service ? $this->sessionOrder($service) : null;
+
+        if(!$order_info){
+            return response()->json(['is_available' => false, 'message' => trans('user_validation.Please select a schedule')]);
+        }
 
         $exist = $this->checkAvaibalityBeforPayment($service, $order_info->date, $order_info->schedule_time_slot);
 
@@ -509,7 +444,7 @@ class PaymentController extends Controller
 
     }
     public function checkAvaibalityBeforPayment($service, $date, $schedule_id){
-        $exist = Order::where(['provider_id' => $service->provider_id, 'appointment_schedule_id' => $schedule_id, 'booking_date' => $date])->count();
+        $exist = BookingPricing::slotTaken($service->provider_id, $schedule_id, $date);
         return $exist;
     }
 
@@ -523,7 +458,7 @@ class PaymentController extends Controller
         }
 
         $rules = [
-            'tnx_info'=>'required',
+            'tnx_info'=>'required|max:1000',
         ];
         $customMessages = [
             'tnx_info.required' => trans('user_validation.Transaction is required'),
@@ -531,11 +466,15 @@ class PaymentController extends Controller
         $this->validate($request, $rules,$customMessages);
 
         $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
-
-
+        if(!$service){
+            abort(404);
+        }
 
         $user = Auth::guard('web')->user();
-        $order_info = Session::get('order_info');
+        $order_info = $this->sessionOrder($service);
+        if(!$order_info){
+            return $this->missingBooking($service);
+        }
         $provider_id = $service->provider_id;
         $client_id = $user->id;
 
@@ -569,8 +508,15 @@ class PaymentController extends Controller
         }
 
         $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
+        if(!$service){
+            abort(404);
+        }
+
         $user = Auth::guard('web')->user();
-        $order_info = Session::get('order_info');
+        $order_info = $this->sessionOrder($service);
+        if(!$order_info){
+            return $this->missingBooking($service);
+        }
         $provider_id = $service->provider_id;
         $client_id = $user->id;
 
@@ -582,20 +528,12 @@ class PaymentController extends Controller
             return redirect()->route('ready-to-booking', $service->slug)->with($notification);
         }
 
-        $total_price = $service->price + $order_info->extra_price;
-
-        $coupon_discount = 0.00;
-        if(Session::get('coupon_code') && Session::get('offer_percentage')) {
-            $offer_percentage = Session::get('offer_percentage');
-            $coupon_discount = ($offer_percentage / 100) * $total_price;
-        }
-
         $stripe = StripePayment::first();
-        $payableAmount = round(($total_price - $coupon_discount) * $stripe->currency_rate,2);
+        $payableAmount = round($this->payableTotal($service, $order_info) * $stripe->currency_rate,2);
         Stripe\Stripe::setApiKey($stripe->stripe_secret);
 
         $result = Stripe\Charge::create ([
-                "amount" => $payableAmount * 100,
+                "amount" => (int) round($payableAmount * 100),
                 "currency" => $stripe->currency_code,
                 "source" => $request->stripeToken,
                 "description" => env('APP_NAME')
@@ -622,50 +560,66 @@ class PaymentController extends Controller
             return redirect()->back()->with($notification);
         }
 
+        $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
+        if(!$service){
+            abort(404);
+        }
+
+        $order_info = $this->sessionOrder($service);
+        if(!$order_info){
+            return $this->missingBooking($service);
+        }
+
+        $failed = array('messege'=>trans('user_validation.Payment Faild'),'alert-type'=>'error');
+        if(empty($request->razorpay_payment_id)){
+            return redirect()->back()->with($failed);
+        }
+
         $razorpay = RazorpayPayment::first();
-        $input = $request->all();
         $api = new Api($razorpay->key,$razorpay->secret_key);
-        $payment = $api->payment->fetch($input['razorpay_payment_id']);
-        if(count($input)  && !empty($input['razorpay_payment_id'])) {
-            try {
-                $response = $api->payment->fetch($input['razorpay_payment_id'])->capture(array('amount'=>$payment['amount']));
-                $payId = $response->id;
 
-                $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
-                $user = Auth::guard('web')->user();
-                $order_info = Session::get('order_info');
-                $provider_id = $service->provider_id;
-                $client_id = $user->id;
+        try {
+            $payment = $api->payment->fetch($request->razorpay_payment_id);
 
-                $exist = $this->checkAvaibalityBeforPayment($service, $order_info->date, $order_info->schedule_time_slot);
-
-                if($exist > 0){
-                    $notification = trans('user_validation.This schedule already booked. please choose another schedule');
-                    $notification = array('messege'=>$notification,'alert-type'=>'error');
-                    return redirect()->route('ready-to-booking', $service->slug)->with($notification);
-                }
-
-                $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Razorpay', 'success', $payId);
-
-                $provider = $service->provider;
-                $this->sendMailToClient($user, $order);
-                $this->sendMailToProvider($provider, $order);
-
-                Session::forget('order_info');
-
-                $notification = trans('user_validation.Your order has been placed. Thanks for your new order');
-                $notification = array('messege'=>$notification,'alert-type'=>'success');
-                return redirect()->route('dashboard')->with($notification);
-
-            }catch (Exception $e) {
-                $notification = trans('user_validation.Payment Faild');
-                $notification = array('messege'=>$notification,'alert-type'=>'error');
-                return redirect()->back()->with($notification);
+            // The payment id comes from the browser, so check it is for this booking's amount.
+            $expected = (int) round(round($this->payableTotal($service, $order_info) * $razorpay->currency_rate, 2) * 100);
+            if(!BookingPricing::amountCovers($payment['amount'], $expected, 1)
+                || strtoupper($payment['currency']) != strtoupper($razorpay->currency_code)
+                || BookingPricing::transactionUsed('Razorpay', $payment['id'])){
+                return redirect()->back()->with($failed);
             }
-        }else{
-            $notification = trans('user_validation.Payment Faild');
-            $notification = array('messege'=>$notification,'alert-type'=>'error');
-            return redirect()->back()->with($notification);
+
+            if($payment['status'] == 'authorized'){
+                $payment = $payment->capture(array('amount'=>$payment['amount']));
+            }
+            $payId = $payment['id'];
+
+            $user = Auth::guard('web')->user();
+            $provider_id = $service->provider_id;
+            $client_id = $user->id;
+
+            $exist = $this->checkAvaibalityBeforPayment($service, $order_info->date, $order_info->schedule_time_slot);
+
+            if($exist > 0){
+                $notification = trans('user_validation.This schedule already booked. please choose another schedule');
+                $notification = array('messege'=>$notification,'alert-type'=>'error');
+                return redirect()->route('ready-to-booking', $service->slug)->with($notification);
+            }
+
+            $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Razorpay', 'success', $payId);
+
+            $provider = $service->provider;
+            $this->sendMailToClient($user, $order);
+            $this->sendMailToProvider($provider, $order);
+
+            Session::forget('order_info');
+
+            $notification = trans('user_validation.Your order has been placed. Thanks for your new order');
+            $notification = array('messege'=>$notification,'alert-type'=>'success');
+            return redirect()->route('dashboard')->with($notification);
+
+        }catch (Exception $e) {
+            return redirect()->back()->with($failed);
         }
     }
 
@@ -677,34 +631,28 @@ class PaymentController extends Controller
             return redirect()->back()->with($notification);
         }
 
+        $failed = ['status' => 'faild' , 'message' => trans('user_validation.Payment Faild')];
+
+        $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
+        $order_info = $service ? $this->sessionOrder($service) : null;
+        if(!$order_info){
+            return response()->json($failed);
+        }
+
         $flutterwave = Flutterwave::first();
-        $curl = curl_init();
         $tnx_id = $request->tnx_id;
-        $url = "https://api.flutterwave.com/v3/transactions/$tnx_id/verify";
-        $token = $flutterwave->secret_key;
-        curl_setopt_array($curl, array(
-        CURLOPT_URL => $url,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_ENCODING => "",
-        CURLOPT_MAXREDIRS => 10,
-        CURLOPT_TIMEOUT => 0,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-        CURLOPT_CUSTOMREQUEST => "GET",
-        CURLOPT_HTTPHEADER => array(
-            "Content-Type: application/json",
-            "Authorization: Bearer $token"
-        ),
-        ));
+        $response = $this->verifyFlutterwave($flutterwave, $tnx_id);
 
-        $response = curl_exec($curl);
+        // The transaction id comes from the browser, so check it is for this booking's amount.
+        $expected = round($this->payableTotal($service, $order_info) * $flutterwave->currency_rate, 2);
+        $paid = ($response->status ?? null) == 'success'
+            && ($response->data->status ?? null) == 'successful'
+            && BookingPricing::amountCovers($response->data->amount ?? null, $expected)
+            && strtoupper($response->data->currency ?? '') == strtoupper($flutterwave->currency_code)
+            && !BookingPricing::transactionUsed('Flutterwave', $tnx_id);
 
-        curl_close($curl);
-        $response = json_decode($response);
-        if($response->status == 'success'){
-            $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
+        if($paid){
             $user = Auth::guard('web')->user();
-            $order_info = Session::get('order_info');
             $provider_id = $service->provider_id;
             $client_id = $user->id;
 
@@ -719,8 +667,7 @@ class PaymentController extends Controller
             $notification = trans('user_validation.Your order has been placed. Thanks for your new order');
             return response()->json(['status' => 'success' , 'message' => $notification]);
         }else{
-            $notification = trans('user_validation.Payment Faild');
-            return response()->json(['status' => 'faild' , 'message' => $notification]);
+            return response()->json($failed);
         }
     }
 
@@ -733,9 +680,14 @@ class PaymentController extends Controller
         }
 
         $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
-        $user = Auth::guard('web')->user();
-        $order_info = Session::get('order_info');
-        $total_price = $service->price + $order_info->extra_price;
+        if(!$service){
+            abort(404);
+        }
+
+        $order_info = $this->sessionOrder($service);
+        if(!$order_info){
+            return $this->missingBooking($service);
+        }
 
         $exist = $this->checkAvaibalityBeforPayment($service, $order_info->date, $order_info->schedule_time_slot);
 
@@ -745,14 +697,8 @@ class PaymentController extends Controller
             return redirect()->route('ready-to-booking', $service->slug)->with($notification);
         }
 
-        $coupon_discount = 0.00;
-        if(Session::get('coupon_code') && Session::get('offer_percentage')) {
-            $offer_percentage = Session::get('offer_percentage');
-            $coupon_discount = ($offer_percentage / 100) * $total_price;
-        }
-
         $mollie = PaystackAndMollie::first();
-        $price = ($total_price - $coupon_discount) * $mollie->mollie_currency_rate;
+        $price = $this->payableTotal($service, $order_info) * $mollie->mollie_currency_rate;
         $price = round($price,2);
         $price = sprintf('%0.2f', $price);
 
@@ -776,10 +722,16 @@ class PaymentController extends Controller
 
     public function molliePaymentSuccess(Request $request){
 
-
-        $service = Session::get('service');
+        $session_service = Session::get('service');
         Session::put('return_from_mollie','payment_faild');
-        $order_info = Session::get('order_info');
+
+        $service = $session_service ? Service::where(['slug' => $session_service->slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first() : null;
+        $order_info = $service ? $this->sessionOrder($service) : null;
+        if(!$order_info){
+            $notification = trans('user_validation.Payment Faild');
+            $notification = array('messege'=>$notification,'alert-type'=>'error');
+            return redirect()->route('home')->with($notification);
+        }
 
         $exist = $this->checkAvaibalityBeforPayment($service, $order_info->date, $order_info->schedule_time_slot);
 
@@ -793,14 +745,18 @@ class PaymentController extends Controller
         $mollie_api_key = $mollie->mollie_key;
         Mollie::api()->setApiKey($mollie_api_key);
         $payment = Mollie::api()->payments->get(session()->get('payment_id'));
-        if ($payment->isPaid()){
-            $service = Service::where(['slug' => $service->slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
+
+        $expected = round($this->payableTotal($service, $order_info) * $mollie->mollie_currency_rate, 2);
+        $paid = $payment->isPaid()
+            && BookingPricing::amountCovers($payment->amount->value, $expected)
+            && !BookingPricing::transactionUsed('Mollie', $payment->id);
+
+        if ($paid){
             $user = Auth::guard('web')->user();
-            $order_info = Session::get('order_info');
             $provider_id = $service->provider_id;
             $client_id = $user->id;
 
-            $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Mollie', 'success', session()->get('payment_id'));
+            $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Mollie', 'success', $payment->id);
 
             $provider = $service->provider;
             $this->sendMailToClient($user, $order);
@@ -827,37 +783,29 @@ class PaymentController extends Controller
             return redirect()->back()->with($notification);
         }
 
+        $failed = ['status' => 'faild' , 'message' => trans('user_validation.Payment Faild')];
+
+        $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
+        $order_info = $service ? $this->sessionOrder($service) : null;
+        if(!$order_info){
+            return response()->json($failed);
+        }
+
         $paystack = PaystackAndMollie::first();
+        $final_data = $this->verifyPaystack($paystack, $request->reference);
 
-        $reference = $request->reference;
-        $transaction = $request->tnx_id;
-        $secret_key = $paystack->paystack_secret_key;
-        $curl = curl_init();
-        curl_setopt_array($curl, array(
-            CURLOPT_URL => "https://api.paystack.co/transaction/verify/$reference",
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_ENCODING => "",
-            CURLOPT_MAXREDIRS => 10,
-            CURLOPT_SSL_VERIFYHOST =>0,
-            CURLOPT_SSL_VERIFYPEER =>0,
-            CURLOPT_TIMEOUT => 30,
-            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-            CURLOPT_CUSTOMREQUEST => "GET",
-            CURLOPT_HTTPHEADER => array(
-                "Authorization: Bearer $secret_key",
-                "Cache-Control: no-cache",
-            ),
-        ));
-        $response = curl_exec($curl);
-        $err = curl_error($curl);
-        curl_close($curl);
-        $final_data = json_decode($response);
-        if($final_data->status == true) {
+        // The reference comes from the browser, so check the transaction itself: that it
+        // succeeded, is for this booking's amount (in kobo/cents) and was not used before.
+        $expected = (int) round($this->payableTotal($service, $order_info) * $paystack->paystack_currency_rate * 100);
+        $transaction = $final_data->data->id ?? null;
+        $paid = ($final_data->status ?? false) == true
+            && ($final_data->data->status ?? null) == 'success'
+            && BookingPricing::amountCovers($final_data->data->amount ?? null, $expected, 1)
+            && strtoupper($final_data->data->currency ?? '') == strtoupper($paystack->paystack_currency_code)
+            && !BookingPricing::transactionUsed('Paystack', $transaction);
 
-            $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
-
+        if($paid) {
             $user = Auth::guard('web')->user();
-            $order_info = Session::get('order_info');
             $provider_id = $service->provider_id;
             $client_id = $user->id;
 
@@ -872,8 +820,7 @@ class PaymentController extends Controller
             $notification = trans('user_validation.Your order has been placed. Thanks for your new order');
             return response()->json(['status' => 'success' , 'message' => $notification]);
         }else{
-            $notification = trans('user_validation.Payment Faild');
-            return response()->json(['status' => 'faild' , 'message' => $notification]);
+            return response()->json($failed);
         }
     }
 
@@ -886,10 +833,15 @@ class PaymentController extends Controller
         }
 
         $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
+        if(!$service){
+            abort(404);
+        }
+
         $user = Auth::guard('web')->user();
-        $order_info = Session::get('order_info');
-        $provider_id = $service->provider_id;
-        $client_id = $user->id;
+        $order_info = $this->sessionOrder($service);
+        if(!$order_info){
+            return $this->missingBooking($service);
+        }
 
         $exist = $this->checkAvaibalityBeforPayment($service, $order_info->date, $order_info->schedule_time_slot);
 
@@ -899,16 +851,8 @@ class PaymentController extends Controller
             return redirect()->route('ready-to-booking', $service->slug)->with($notification);
         }
 
-        $total_price = $service->price + $order_info->extra_price;
-
-        $coupon_discount = 0.00;
-        if(Session::get('coupon_code') && Session::get('offer_percentage')) {
-            $offer_percentage = Session::get('offer_percentage');
-            $coupon_discount = ($offer_percentage / 100) * $total_price;
-        }
-
         $instamojoPayment = InstamojoPayment::first();
-        $price = ($total_price - $coupon_discount) * $instamojoPayment->currency_rate;
+        $price = $this->payableTotal($service, $order_info) * $instamojoPayment->currency_rate;
         $price = round($price,2);
 
         $environment = $instamojoPayment->account_mode;
@@ -933,13 +877,12 @@ class PaymentController extends Controller
         $payload = Array(
             'purpose' => env("APP_NAME"),
             'amount' => $price,
-            'phone' => '918160651749',
-            'buyer_name' => Auth::user()->name,
+            'phone' => $order_info->customer->phone,
+            'buyer_name' => $user->name,
             'redirect_url' => route('response-instamojo'),
             'send_email' => true,
-            'webhook' => 'http://www.example.com/webhook/',
             'send_sms' => true,
-            'email' => Auth::user()->email,
+            'email' => $user->email,
             'allow_repeated_payments' => false
         );
         curl_setopt($ch, CURLOPT_POST, true);
@@ -954,9 +897,15 @@ class PaymentController extends Controller
     public function instamojoResponse(Request $request){
 
         Session::put('return_from_mollie','payment_faild');
-        $service = Session::get('service');
+        $session_service = Session::get('service');
 
-        $order_info = Session::get('order_info');
+        $service = $session_service ? Service::where(['slug' => $session_service->slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first() : null;
+        $order_info = $service ? $this->sessionOrder($service) : null;
+
+        $failed = array('messege'=>trans('user_validation.Payment Faild'),'alert-type'=>'error');
+        if(!$order_info){
+            return redirect()->route('home')->with($failed);
+        }
 
         $exist = $this->checkAvaibalityBeforPayment($service, $order_info->date, $order_info->schedule_time_slot);
 
@@ -966,66 +915,101 @@ class PaymentController extends Controller
             return redirect()->route('ready-to-booking', $service->slug)->with($notification);
         }
 
-        $input = $request->all();
         $instamojoPayment = InstamojoPayment::first();
-        $environment = $instamojoPayment->account_mode;
-        $api_key = $instamojoPayment->api_key;
-        $auth_token = $instamojoPayment->auth_token;
+        $payment_id = $request->get('payment_id');
+        $data = $this->fetchInstamojoPayment($instamojoPayment, $payment_id);
 
-        if($environment == 'Sandbox') {
-            $url = 'https://test.instamojo.com/api/1.1/';
-        } else {
-            $url = 'https://www.instamojo.com/api/1.1/';
+        // The payment id comes from the redirect URL, so check the payment itself.
+        $expected = round($this->payableTotal($service, $order_info) * $instamojoPayment->currency_rate, 2);
+        $paid = $data
+            && ($data->success ?? false) == true
+            && ($data->payment->status ?? null) == 'Credit'
+            && BookingPricing::amountCovers($data->payment->amount ?? null, $expected)
+            && !BookingPricing::transactionUsed('Instamojo', $payment_id);
+
+        if(!$paid){
+            return redirect()->route('payment', $service->slug)->with($failed);
         }
+
+        $user = Auth::guard('web')->user();
+        $provider_id = $service->provider_id;
+        $client_id = $user->id;
+
+        $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Instamojo', 'success', $payment_id);
+
+        $provider = $service->provider;
+        $this->sendMailToClient($user, $order);
+        $this->sendMailToProvider($provider, $order);
+
+        Session::forget('order_info');
+        Session::forget('return_from_mollie');
+        Session::forget('service');
+
+        $notification = trans('user_validation.Your order has been placed. Thanks for your new order');
+        $notification = array('messege'=>$notification,'alert-type'=>'success');
+        return redirect()->route('dashboard')->with($notification);
+    }
+
+    private function verifyFlutterwave($flutterwave, $tnx_id){
+        if(!$tnx_id || !ctype_digit((string) $tnx_id)){
+            return null;
+        }
+
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => "https://api.flutterwave.com/v3/transactions/$tnx_id/verify",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_HTTPHEADER => array(
+                "Content-Type: application/json",
+                "Authorization: Bearer ".$flutterwave->secret_key
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
+
+        return $response ? json_decode($response) : null;
+    }
+
+    private function verifyPaystack($paystack, $reference){
+        if(!$reference){
+            return null;
+        }
+
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => "https://api.paystack.co/transaction/verify/".rawurlencode($reference),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_HTTPHEADER => array(
+                "Authorization: Bearer ".$paystack->paystack_secret_key,
+                "Cache-Control: no-cache",
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
+
+        return $response ? json_decode($response) : null;
+    }
+
+    private function fetchInstamojoPayment($instamojoPayment, $payment_id){
+        if(!$payment_id){
+            return null;
+        }
+
+        $url = $instamojoPayment->account_mode == 'Sandbox' ? 'https://test.instamojo.com/api/1.1/' : 'https://www.instamojo.com/api/1.1/';
 
         $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url.'payments/'.$request->get('payment_id'));
-        curl_setopt($ch, CURLOPT_HEADER, FALSE);
+        curl_setopt($ch, CURLOPT_URL, $url.'payments/'.rawurlencode($payment_id).'/');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, TRUE);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
         curl_setopt($ch, CURLOPT_HTTPHEADER,
-            array("X-Api-Key:$api_key",
-                "X-Auth-Token:$auth_token"));
+            array("X-Api-Key:".$instamojoPayment->api_key,
+                "X-Auth-Token:".$instamojoPayment->auth_token));
         $response = curl_exec($ch);
-        $err = curl_error($ch);
         curl_close($ch);
 
-        if ($err) {
-            $notification = trans('user_validation.Payment Faild');
-            $notification = array('messege'=>$notification,'alert-type'=>'error');
-            return redirect()->route('payment', $service->slug)->with($notification);
-        } else {
-            $data = json_decode($response);
-        }
-
-        if($data->success == true) {
-            if($data->payment->status == 'Credit') {
-
-                $service = Service::where(['slug' => $service->slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
-                $user = Auth::guard('web')->user();
-                $order_info = Session::get('order_info');
-                $provider_id = $service->provider_id;
-                $client_id = $user->id;
-
-                $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Instamojo', 'success', $request->get('payment_id'));
-
-                $provider = $service->provider;
-                $this->sendMailToClient($user, $order);
-                $this->sendMailToProvider($provider, $order);
-
-                Session::forget('order_info');
-                Session::forget('return_from_mollie');
-                Session::forget('service');
-
-                $notification = trans('user_validation.Your order has been placed. Thanks for your new order');
-                $notification = array('messege'=>$notification,'alert-type'=>'success');
-                return redirect()->route('dashboard')->with($notification);
-            }
-        }else{
-            $notification = trans('user_validation.Payment Faild');
-            $notification = array('messege'=>$notification,'alert-type'=>'error');
-            return redirect()->route('payment', $service->slug)->with($notification);
-        }
+        return $response ? json_decode($response) : null;
     }
 
 
@@ -1037,11 +1021,10 @@ class PaymentController extends Controller
         $additional_services = array();
         if($extra_services->ids){
             foreach($extra_services->ids as $index => $extra_service){
-                $addition = AdditionalService::find($extra_services->ids[$index]);
                 $single_extra_service = array(
                     'service_name' => $extra_services->names[$index],
                     'qty' => $extra_services->quantities[$index],
-                    'price' => ($extra_services->quantities[$index] * $addition->price),
+                    'price' => $extra_services->prices[$index],
                 );
                 $additional_services[] = $single_extra_service;
             }
@@ -1058,23 +1041,18 @@ class PaymentController extends Controller
             $time_slot = strtoupper(date('h:i A', strtotime($find_schedule->start_time))).' - '.strtoupper(date('h:i A', strtotime($find_schedule->end_time)));
         }
 
-        $coupon_discount = 0.00;
-        if(Session::get('coupon_code') && Session::get('offer_percentage')) {
-            $offer_percentage = Session::get('offer_percentage');
-            $coupon_discount = ($offer_percentage / 100) * ($service->price + $additional_amount);
+        $coupon = BookingPricing::sessionCoupon($service);
+        $totals = BookingPricing::totals($service, $additional_amount, $coupon);
+        $coupon_discount = $totals->discount;
 
-            $coupon = Coupon::where(['coupon_code' => Session::get('coupon_code')])->first();
-
-            if($coupon){
-                $history = new CouponHistory();
-                $history->user_id = $client_id;
-                $history->provider_id = $coupon->provider_id;
-                $history->coupon_code = $coupon->coupon_code;
-                $history->coupon_id = $coupon->id;
-                $history->discount_amount = $coupon_discount;
-                $history->save();
-            }
-
+        if($coupon){
+            $history = new CouponHistory();
+            $history->user_id = $client_id;
+            $history->provider_id = $coupon->provider_id;
+            $history->coupon_code = $coupon->coupon_code;
+            $history->coupon_id = $coupon->id;
+            $history->discount_amount = $coupon_discount;
+            $history->save();
         }
 
 
@@ -1089,7 +1067,7 @@ class PaymentController extends Controller
         $order->package_amount = $service->price;
         $order->additional_amount = $additional_amount;
         $order->coupon_discount  = $coupon_discount;
-        $order->total_amount = (($service->price + $additional_amount) - $coupon_discount);
+        $order->total_amount = $totals->total;
         $order->payment_method = $payment_method;
         $order->transection_id = $tnx_info;
         $order->payment_status = $payment_status;

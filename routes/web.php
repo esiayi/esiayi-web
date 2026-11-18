@@ -79,7 +79,7 @@ use App\Http\Controllers\User\CheckoutController;
 use App\Http\Controllers\User\PaymentController;
 use App\Http\Controllers\API\User\PaymentController as ApiPaymentController;
 use App\Http\Controllers\User\PaypalController;
-use App\Http\Controllers\Api\User\PaypalController as ApiPaypalController;
+use App\Http\Controllers\API\User\PaypalController as ApiPaypalController;
 
 
 
@@ -130,7 +130,6 @@ Route::group(['middleware' => ['maintainance']], function () {
     Route::get('state-by-country/{id}',[HomeController::class,'stateByCountry'])->name('state-by-country');
     Route::get('city-by-state/{id}',[HomeController::class,'cityByState'])->name('city-by-state');
 
-    Route::get('/check-provider-schedule', [PaymentController::class, 'check_provider_schedule'])->name('check-provider-schedule');
 
     Route::get('/ready-to-booking/{slug}', [PaymentController::class, 'ready_to_booking'])->name('ready-to-booking');
 
@@ -142,7 +141,7 @@ Route::group(['middleware' => ['maintainance']], function () {
 
 
     Route::get('/booking-information/{slug}', [PaymentController::class, 'booking_information'])->name('booking-information');
-    Route::get('/payment/{slug}', [PaymentController::class, 'payment'])->name('payment');
+    Route::match(['get', 'post'], '/payment/{slug}', [PaymentController::class, 'payment'])->name('payment');
     Route::post('/bank-payment/{slug}', [PaymentController::class, 'bankPayment'])->name('bank-payment');
     Route::post('/pay-with-stripe/{slug}', [PaymentController::class, 'payWithStripe'])->name('pay-with-stripe');
     Route::post('/pay-with-razorpay/{slug}', [PaymentController::class, 'payWithRazorpay'])->name('pay-with-razorpay');
@@ -177,7 +176,6 @@ Route::group(['middleware' => ['maintainance']], function () {
 
     Route::get('/instamojo-response-webview', [ApiPaymentController::class, 'instamojo_response'])->name('instamojo-response-webview');
 
-    Route::get('/paypal-web-view', [ApiPaypalController::class, 'paypal_web_view'])->name('paypal-web-view');
 
     Route::get('/pay-with-paypal-webview', [ApiPaypalController::class, 'payWithPaypal'])->name('pay-with-paypal-webview');
 
@@ -232,17 +230,17 @@ Route::group(['middleware' => ['maintainance']], function () {
         Route::put('password-update',[ProviderProfileController::class,'updatePassword'])->name('password-update');
         Route::put('update-provider-profile',[ProviderProfileController::class,'updateSellerProfile'])->name('update-provider-profile');
 
-        Route::resource('my-withdraw', WithdrawController::class);
+        Route::resource('my-withdraw', WithdrawController::class)->only(['index', 'create', 'store', 'show']);
         Route::get('get-withdraw-account-info/{id}', [WithdrawController::class, 'getWithDrawAccountInfo'])->name('get-withdraw-account-info');
 
-        Route::resource('service', ServiceController::class);
+        Route::resource('service', ServiceController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
         Route::get('review-list', [ServiceController::class, 'reviewList'])->name('review-list');
         Route::get('show-review/{id}', [ServiceController::class, 'showReview'])->name('show-review');
         Route::get('awaiting-for-approval-service', [ServiceController::class, 'awaitingForApproval'])->name('awaiting-for-approval-service');
         Route::get('active-service', [ServiceController::class, 'activeService'])->name('active-service');
         Route::get('banned-service', [ServiceController::class, 'bannedService'])->name('banned-service');
 
-        Route::resource('appointment-schedule',AppointmentScheduleController::class);
+        Route::resource('appointment-schedule', AppointmentScheduleController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
 
         Route::get('ticket', [ProviderTicketController::class, 'index'])->name('ticket');
         Route::get('ticket-show/{id}', [ProviderTicketController::class, 'show'])->name('ticket-show');
@@ -262,7 +260,7 @@ Route::group(['middleware' => ['maintainance']], function () {
         Route::get('complete-request', [ProviderOrderController::class, 'completeRequest'])->name('complete-request');
         Route::post('send-order-complete-request', [ProviderOrderController::class, 'sendCompleteRequest'])->name('send-order-complete-request');
 
-        Route::resource('coupon', CouponController::class);
+        Route::resource('coupon', CouponController::class)->only(['index', 'store', 'update', 'destroy']);
         Route::get('coupon-history', [CouponController::class, 'coupon_history'])->name('coupon-history');
 
         Route::get('live-chat', [MessageController::class, 'index'])->name('live-chat');
@@ -289,7 +287,7 @@ Route::group(['as'=> 'admin.', 'prefix' => 'admin'],function (){
     Route::post('password-store/{token}', [AdminForgotPasswordController::class,'storeResetData'])->name('store.reset.password');
     // end auth route
 
-    Route::resource('admin', AdminController::class);
+    Route::resource('admin', AdminController::class)->only(['index', 'create', 'store', 'destroy']);
     Route::put('admin-status/{id}', [AdminController::class,'changeStatus'])->name('admin-status');
     Route::get('profile', [AdminProfileController::class,'index'])->name('profile');
     Route::put('profile-update', [AdminProfileController::class,'update'])->name('profile.update');
@@ -338,19 +336,19 @@ Route::group(['as'=> 'admin.', 'prefix' => 'admin'],function (){
     Route::get('edit-email-template/{id}',[EmailTemplateController::class,'edit'])->name('edit-email-template');
     Route::put('update-email-template/{id}',[EmailTemplateController::class,'update'])->name('update-email-template');
 
-    Route::resource('blog-category', BlogCategoryController::class);
+    Route::resource('blog-category', BlogCategoryController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     Route::put('blog-category-status/{id}', [BlogCategoryController::class,'changeStatus'])->name('blog.category.status');
 
-    Route::resource('blog', BlogController::class);
+    Route::resource('blog', BlogController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     Route::put('blog-status/{id}', [BlogController::class,'changeStatus'])->name('blog.status');
 
-    Route::resource('popular-blog', PopularBlogController::class);
+    Route::resource('popular-blog', PopularBlogController::class)->only(['index', 'store', 'destroy']);
     Route::put('popular-blog-status/{id}', [PopularBlogController::class,'changeStatus'])->name('popular-blog.status');
 
-    Route::resource('blog-comment', BlogCommentController::class);
+    Route::resource('blog-comment', BlogCommentController::class)->only(['index', 'destroy']);
     Route::put('blog-comment-status/{id}', [BlogCommentController::class,'changeStatus'])->name('blog-comment.status');
 
-    Route::resource('about-us', AboutUsController::class);
+    Route::resource('about-us', AboutUsController::class)->only(['index']);
     Route::post('store-how-it-work', [AboutUsController::class, 'addNewHotItWork'])->name('store-how-it-work');
     Route::put('update-how-it-work/{id}', [AboutUsController::class, 'updateHotItWork'])->name('update-how-it-work');
     Route::delete('delete-how-it-work/{id}', [AboutUsController::class, 'deleteHotItWork'])->name('delete-how-it-work');
@@ -359,22 +357,22 @@ Route::group(['as'=> 'admin.', 'prefix' => 'admin'],function (){
     Route::put('update-about-us', [AboutUsController::class, 'updateAboutUs'])->name('update-about-us');
     Route::put('update-why-choose-use', [AboutUsController::class, 'updateWhyChooseUs'])->name('update-why-choose-use');
 
-    Route::resource('contact-us', ContactPageController::class);
+    Route::resource('contact-us', ContactPageController::class)->only(['index', 'store', 'update']);
 
-    Route::resource('custom-page', CustomPageController::class);
+    Route::resource('custom-page', CustomPageController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     Route::put('custom-page-status/{id}', [CustomPageController::class,'changeStatus'])->name('custom-page.status');
 
-    Route::resource('terms-and-condition', TermsAndConditionController::class);
-    Route::resource('privacy-policy', PrivacyPolicyController::class);
+    Route::resource('terms-and-condition', TermsAndConditionController::class)->only(['index', 'update']);
+    Route::resource('privacy-policy', PrivacyPolicyController::class)->only(['index', 'update']);
 
-    Route::resource('faq', FaqController::class);
+    Route::resource('faq', FaqController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     Route::put('faq-status/{id}', [FaqController::class,'changeStatus'])->name('faq-status');
 
-    Route::resource('error-page', ErrorPageController::class);
+    Route::resource('error-page', ErrorPageController::class)->only(['index', 'update']);
 
-    Route::resource('footer', FooterController::class);
-    Route::resource('social-link', FooterSocialLinkController::class);
-    Route::resource('footer-link', FooterLinkController::class);
+    Route::resource('footer', FooterController::class)->only(['index', 'update']);
+    Route::resource('social-link', FooterSocialLinkController::class)->only(['index', 'store', 'update', 'destroy']);
+    Route::resource('footer-link', FooterLinkController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::get('second-col-footer-link', [FooterLinkController::class, 'secondColFooterLink'])->name('second-col-footer-link');
     Route::get('third-col-footer-link', [FooterLinkController::class, 'thirdColFooterLink'])->name('third-col-footer-link');
     Route::put('update-col-title/{id}', [FooterLinkController::class, 'updateColTitle'])->name('update-col-title');
@@ -383,18 +381,17 @@ Route::group(['as'=> 'admin.', 'prefix' => 'admin'],function (){
     Route::put('update-topbar-contact', [ContentController::class, 'updateHeaderPhoneNumber'])->name('update-topbar-contact');
 
 
-    Route::resource('slider', SliderController::class);
-    Route::put('slider-status/{id}',[SliderController::class,'changeStatus'])->name('slider-status');
+    Route::resource('slider', SliderController::class)->only(['index', 'update']);
 
-    Route::resource('mobile-slider', MobileSliderController::class);
-
+    Route::resource('mobile-slider', MobileSliderController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
 
 
-    Route::resource('counter', CounterController::class);
+
+    Route::resource('counter', CounterController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     Route::put('counter-status/{id}', [CounterController::class,'changeStatus'])->name('counter.status');
     Route::put('update-counter-bg', [CounterController::class,'updateCounterBg'])->name('update-counter-bg');
 
-    Route::resource('testimonial', TestimonialController::class);
+    Route::resource('testimonial', TestimonialController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     Route::put('testimonial-status/{id}', [TestimonialController::class,'changeStatus'])->name('testimonial.status');
 
     Route::get('join-as-a-provider', [ContentController::class, 'joinAsAProvider'])->name('join-as-a-provider');
@@ -427,7 +424,7 @@ Route::group(['as'=> 'admin.', 'prefix' => 'admin'],function (){
     Route::post('send-mail-to-all-user',[CustomerController::class,'sendMailToAllUser'])->name('send-mail-to-all-user');
     Route::post('send-mail-to-single-user/{id}',[CustomerController::class,'sendMailToSingleUser'])->name('send-mail-to-single-user');
 
-    Route::resource('withdraw-method', WithdrawMethodController::class);
+    Route::resource('withdraw-method', WithdrawMethodController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     Route::put('withdraw-method-status/{id}',[WithdrawMethodController::class,'changeStatus'])->name('withdraw-method-status');
 
     Route::get('provider-withdraw', [ProviderWithdrawController::class, 'index'])->name('provider-withdraw');
@@ -446,22 +443,20 @@ Route::group(['as'=> 'admin.', 'prefix' => 'admin'],function (){
     Route::put('update-paystack',[PaymentMethodController::class,'updatePayStack'])->name('update-paystack');
     Route::put('update-flutterwave',[PaymentMethodController::class,'updateflutterwave'])->name('update-flutterwave');
     Route::put('update-instamojo',[PaymentMethodController::class,'updateInstamojo'])->name('update-instamojo');
-    Route::put('update-paymongo',[PaymentMethodController::class,'updatePaymongo'])->name('update-paymongo');
-    Route::put('update-cash-on-delivery',[PaymentMethodController::class,'updateCashOnDelivery'])->name('update-cash-on-delivery');
 
-    Route::resource('partner', PartnerController::class);
+    Route::resource('partner', PartnerController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     Route::put('partner-status/{id}', [PartnerController::class,'changeStatus'])->name('partner-status');
 
-    Route::resource('category', CategoryController::class);
+    Route::resource('category', CategoryController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     Route::put('category-status/{id}', [CategoryController::class,'changeStatus'])->name('category.status');
 
-    Route::resource('country', CountryController::class);
+    Route::resource('country', CountryController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     Route::put('country-status/{id}',[CountryController::class,'changeStatus'])->name('country-status');
 
-    Route::resource('state', CountryStateController::class);
+    Route::resource('state', CountryStateController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     Route::put('state-status/{id}',[CountryStateController::class,'changeStatus'])->name('state-status');
 
-    Route::resource('city', CityController::class);
+    Route::resource('city', CityController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     Route::put('city-status/{id}',[CityController::class,'changeStatus'])->name('city-status');
 
     Route::get('state-by-country/{id}',[CityController::class,'stateByCountry'])->name('state-by-country');
@@ -520,7 +515,7 @@ Route::group(['as'=> 'admin.', 'prefix' => 'admin'],function (){
     Route::put('ticket-closed/{id}', [TicketController::class, 'closed'])->name('ticket-closed');
     Route::post('store-ticket-message', [TicketController::class, 'storeMessage'])->name('store-ticket-message');
 
-    Route::resource('service', AdminServiceController::class);
+    Route::resource('service', AdminServiceController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
     Route::get('awaiting-for-approval-service', [AdminServiceController::class, 'awaitingForApproval'])->name('awaiting-for-approval-service');
     Route::get('active-service', [AdminServiceController::class, 'activeService'])->name('active-service');
     Route::get('banned-service', [AdminServiceController::class, 'bannedService'])->name('banned-service');
@@ -530,7 +525,7 @@ Route::group(['as'=> 'admin.', 'prefix' => 'admin'],function (){
     Route::delete('delete-service-review/{id}', [AdminServiceController::class, 'deleteReview'])->name('delete-service-review');
     Route::put('update-review/{id}', [AdminServiceController::class, 'updateReview'])->name('update-review');
 
-    Route::resource('banner-image', BreadcrumbController::class);
+    Route::resource('banner-image', BreadcrumbController::class)->only(['index', 'update']);
 
     Route::get('/', [DashboardController::class,'dashobard']);
     Route::get('dashboard', [DashboardController::class,'dashobard'])->name('dashboard');
@@ -544,7 +539,7 @@ Route::group(['as'=> 'admin.', 'prefix' => 'admin'],function (){
     Route::put('update-menu-visibility', [MenuVisibilityController::class, 'update'])->name('update-menu-visibility');
 
 
-    Route::resource('coupon', AdminCouponController::class);
+    Route::resource('coupon', AdminCouponController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::get('coupon-history', [AdminCouponController::class, 'coupon_history'])->name('coupon-history');
 
 

@@ -112,7 +112,7 @@
 
                                     <a data-toggle="modal" data-target="#deleteModal" onclick="deleteData({{ $order->id }})" href="javascript:;" data-toggle="modal" data-target="#declinedOrder-{{ $order->id }}" class="btn btn-danger btn-sm"><i class="fas fa-trash    "></i> {{__('admin.Delete')}}</a>
 
-                                    @if ($order->order_status != 'complete')
+                                    @if ($order->order_status != 'complete' && $order->payment_status == 'success')
                                         <a href="javascript:;"  data-toggle="modal" data-target="#markAsCompelete-{{ $order->id }}" class="btn btn-primary btn-sm"><i class="fas fa-check"></i> {{__('admin.Mark as complete')}}</a>
                                     @endif
                                 </div>

@@ -102,7 +102,7 @@
                                                         </td>
                                                         <td class="name">
                                                             <div class="form-check">
-                                                                <input onclick="checkExtraService({{ $additional_service->id }},{{ $additional_service->price }},'{{ $additional_service->service_name }}')" class="form-check-input" type="checkbox" value=""
+                                                                <input onclick="checkExtraService({{ $additional_service->id }}, {{ (float) $additional_service->price }}, this.dataset.name)" data-name="{{ $additional_service->service_name }}" class="form-check-input" type="checkbox" value=""
                                                                     id="flexCheckDefault-{{ $index }}">
                                                                 <label class="form-check-label" for="flexCheckDefault-{{ $index }}">
                                                                     {{ $additional_service->service_name }}
@@ -113,7 +113,7 @@
                                                             <p>{{ $currency_icon->icon }}{{ $additional_service->price }}</p>
                                                         </td>
                                                         <td class="qty">
-                                                            <input min="1" onchange="qtyUpdate({{ $additional_service->id }}, {{ $additional_service->price }})" id="service_qty_{{ $additional_service->id }}" type="number" value="{{ $additional_service->qty }}">
+                                                            <input min="1" max="100" step="1" onchange="qtyUpdate({{ $additional_service->id }}, {{ (float) $additional_service->price }})" id="service_qty_{{ $additional_service->id }}" type="number" value="{{ max(1, (int) $additional_service->qty) }}">
                                                         </td>
 
                                                     </tr>
@@ -136,7 +136,11 @@
                     <div class="wsus__sidebar" id="sticky_sidebar">
 
                         <div class="wsus__booking_calendar">
-                            <div id="service_available_dates"></div>
+                            @if (count($available_days) > 0)
+                                <div id="service_available_dates"></div>
+                            @else
+                                <p class="p-4 m-0">{{ __('This provider has not set their availability yet. Please choose another service or contact us.') }}</p>
+                            @endif
                         </div>
 
                         <div class="wsus__booking_pic_up mt_25">
@@ -172,10 +176,9 @@
         </div>
     </section>
 
+    {{-- Prices are worked out on the server; only the chosen add-ons, quantities, date and slot are sent. --}}
     <form action="{{ route('booking-information', $service->slug) }}" id="submitReadyToBooking">
-        <input type="hidden" id="input_extra_total" name="extra_total" value="{{ round($extra_service, 2) }}">
-        <input type="hidden" id="input_sub_total" name="sub_total" value="{{ round($service->price, 2) }}">
-        <input type="hidden" id="input_total" name="total" value="{{ round($service->price + $extra_service, 2) }}">
+        <input type="hidden" id="input_sub_total" value="{{ round($service->price, 2) }}">
         <input type="hidden" id="input_date" name="date" value="">
         <input type="hidden" id="schedule_time_slot" name="schedule_time_slot" value="">
 
@@ -208,18 +211,25 @@
                 $("#submitReadyToBooking").submit();
             })
 
-            //Date and time
-            $("#service_available_dates").flatpickr({
-                minDate: "today",
-                inline: true,
-                altInput: true,
-                altFormat: "F j, Y",
-                dateFormat: "d-m-Y"
-            });
+            //Date and time. Only weekdays the provider works are selectable.
+            const availableDays = @json($available_days);
+            const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
-            $("#service_available_dates").on("change", function(){
-                let date_string = $(this).val();
+            if ($("#service_available_dates").length) {
+                $("#service_available_dates").flatpickr({
+                    minDate: "today",
+                    inline: true,
+                    altInput: true,
+                    altFormat: "F j, Y",
+                    dateFormat: "d-m-Y",
+                    enable: [function(date){ return availableDays.indexOf(dayNames[date.getDay()]) !== -1; }],
+                    onChange: function(selectedDates, date_string){ loadSchedules(date_string); }
+                });
+            }
+
+            function loadSchedules(date_string){
                 $("#input_date").val(date_string)
+                $("#schedule_time_slot").val('');
                 let provider_id = "{{ $service->provider_id }}";
                 $.ajax({
                     type: 'get',
@@ -231,7 +241,6 @@
                         }else{
                             let html = `<option value="">{{__('user.Select')}}</option>`;
                             $("#schedule_box").html(html);
-                            $("#schedule_time_slot").val('');
 
                             toastr.error("{{__('user.Schedule Not Found')}}")
                         }
@@ -239,12 +248,11 @@
                     error: function(response) {
                         let html = `<option value="">{{__('user.Select')}}</option>`;
                         $("#schedule_box").html(html);
-                        $("#schedule_time_slot").val('');
 
                         toastr.error("{{__('user.Something went wrong')}}")
                     }
                 });
-            })
+            }
 
             $("#schedule_box").on("change", function(){
                 $("#schedule_time_slot").val($(this).val());
@@ -259,18 +267,25 @@
              z(d.getDate());
         }
 
+    function readQty(id){
+        let qty = parseInt($("#service_qty_"+id).val(), 10);
+        if (!qty || qty < 1) { qty = 1; }
+        if (qty > 100) { qty = 100; }
+        $("#service_qty_"+id).val(qty);
+        return qty;
+    }
+
     function checkExtraService(id, price, name){
 
         if(!extraService.some(service => service.id == id)){
-            let qty = $("#service_qty_"+id).val();
-            price = price * qty;
-            let arr = {
+            let qty = readQty(id);
+            extraService.push({
                 id : id,
                 name : name,
-                price : price,
+                unit_price : price,
+                price : price * qty,
                 qty : qty
-            };
-            extraService.push(arr);
+            });
         }else{
             extraService = extraService.filter(service => service.id !== id)
         }
@@ -278,55 +293,31 @@
     }
 
     function loadExtraService(){
-        let html_service = '';
         let extra_price = 0;
-        let extra_input = '';
+        let $list = $(".extra_service_area").empty();
+        let $inputs = $("#extra_input").empty();
+
         extraService.forEach(service => {
             extra_price += service.price;
-            html_service += `
-                <li>
-                    <p>${service.name} <b>x ${service.qty} </b></p> <span>${currency_icon}${service.price}</span>
-                </li>
-            `;
 
-            extra_input += `
-                <input type="hidden" value="${service.id}" name="ids[]">
-                <input type="hidden" value="${service.price}" name="prices[]">
-                <input type="hidden" value="${service.qty}" name="quantities[]">
-                <input type="hidden" value="${service.name}" name="names[]">
-            `;
+            // Built with text() so add-on names are never interpreted as HTML.
+            let $p = $("<p>").text(service.name + " ").append($("<b>").text("x " + service.qty));
+            $list.append($("<li>").append($p).append($("<span>").text(currency_icon + service.price)));
+
+            $inputs.append($("<input>", { type: "hidden", name: "ids[]", value: service.id }));
+            $inputs.append($("<input>", { type: "hidden", name: "quantities[]", value: service.qty }));
         });
 
-        $(".extra_service_area").html(html_service);
-        $("#extra_input").html(extra_input);
-
-        $("#extra_service_price").html(extra_price);
-        $("#input_extra_total").val(extra_price);
-
+        $("#extra_service_price").text(extra_price);
 
         let sub_total = $("#input_sub_total").val();
-        let total_price = sub_total*1 + extra_price*1;
-        $("#total_price").html(total_price);
-        $("#input_total").val(total_price);
-
-
+        $("#total_price").text(sub_total*1 + extra_price*1);
     }
 
-    function qtyUpdate(id, new_price){
+    function qtyUpdate(id, unit_price){
+        let qty = readQty(id);
         if(extraService.some(service => service.id == id)){
-            extraService = extraService.map(service => {
-                let qty = service.qty;
-                let price = service.price;
-                if(service.id == id){
-                    qty = $("#service_qty_"+id).val();
-                    price = new_price * qty;
-                }
-                return {
-                    ...service,
-                    qty,
-                    price
-                }
-            })
+            extraService = extraService.map(service => service.id == id ? { ...service, qty: qty, price: unit_price * qty } : service);
             loadExtraService();
         }
     }

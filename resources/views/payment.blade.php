@@ -32,14 +32,6 @@
         BREADCRUMB END
     ==========================-->
 
-    @php
-        $coupon_discount = 0.00;
-        if(Session::get('coupon_code') && Session::get('offer_percentage')) {
-            $offer_percentage = Session::get('offer_percentage');
-            $coupon_discount = ($offer_percentage / 100) * $extra_services->total;
-        }
-    @endphp
-
     <!--=========================
         BOOKING CONFIRM START
     ==========================-->
@@ -187,8 +179,6 @@
                                 <form action="{{ route('apply-coupon') }}">
                                     <input type="text" name="coupon" placeholder="{{__('user.Coupon Code')}}" autocomplete="off" required>
 
-                                    <input type="hidden" value="{{ $service->provider_id }}" name="provider_id">
-
                                     <button class="common_btn ">{{__('user.Apply')}}</button>
                                 </form>
                             </div>
@@ -216,16 +206,16 @@
                         @csrf
                         <div class="row">
                             <div class="col-xl-12">
-                                <input type="text" class="card-number" name="card_number" placeholder="{{__('user.Card Number')}}">
+                                <input type="text" class="card-number" autocomplete="off" placeholder="{{__('user.Card Number')}}">
                             </div>
                             <div class="col-xl-6 col-sm-6">
-                                <input type="text" class="card-expiry-month" name="month" placeholder="{{__('user.Expired Month')}}">
+                                <input type="text" class="card-expiry-month" autocomplete="off" placeholder="{{__('user.Expired Month')}}">
                             </div>
                             <div class="col-xl-6 col-sm-6">
-                                <input type="text" class="card-expiry-year" name="year" placeholder="{{__('user.Expired Year')}}">
+                                <input type="text" class="card-expiry-year" autocomplete="off" placeholder="{{__('user.Expired Year')}}">
                             </div>
                             <div class="col-xl-12">
-                                <input type="text" class="card-cvc" name="cvc" placeholder="{{__('user.CVV')}}">
+                                <input type="text" class="card-cvc" autocomplete="off" placeholder="{{__('user.CVV')}}">
                             </div>
                         </div>
 

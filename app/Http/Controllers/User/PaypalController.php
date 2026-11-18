@@ -25,6 +25,9 @@ use App\Models\Service;
 use App\Models\AdditionalService;
 use App\Models\Order;
 use App\Models\Setting;
+use App\Models\AppointmentSchedule;
+use App\Models\CouponHistory;
+use App\Services\BookingPricing;
 
 use Str;
 use Cart;
@@ -64,14 +67,19 @@ class PaypalController extends Controller
             return redirect()->back()->with($notification);
         }
         $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
-        $user = Auth::guard('web')->user();
-        $order_info = Session::get('order_info');
-        $provider_id = $service->provider_id;
-        $client_id = $user->id;
-        $total_price = $service->price + $order_info->extra_price;
+        if(!$service){
+            abort(404);
+        }
+
+        $order_info = $this->sessionOrder($service);
+        if(!$order_info){
+            $notification = trans('user_validation.Please select a schedule');
+            $notification = array('messege'=>$notification,'alert-type'=>'error');
+            return redirect()->route('ready-to-booking', $service->slug)->with($notification);
+        }
 
         $paypalSetting = PaypalPayment::first();
-        $payableAmount = round($total_price * $paypalSetting->currency_rate,2);
+        $payableAmount = $this->payableAmount($service, $order_info, $paypalSetting);
 
         $name=env('APP_NAME');
 
@@ -122,43 +130,64 @@ class PaypalController extends Controller
     public function paypalPaymentSuccess(Request $request){
 
         Session::put('return_from_mollie','payment_faild');
-        $service = Session::get('service');
+        $session_service = Session::get('service');
+        $service = $session_service ? Service::where(['slug' => $session_service->slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first() : null;
+        $order_info = $service ? $this->sessionOrder($service) : null;
 
-        if (empty($request->get('PayerID')) || empty($request->get('token'))) {
-            $notification = trans('user_validation.Payment Faild');
-            $notification = array('messege'=>$notification,'alert-type'=>'error');
-            return redirect()->route('payment', $service->slug)->with($notification);
+        $failed = array('messege'=>trans('user_validation.Payment Faild'),'alert-type'=>'error');
+        if(!$order_info){
+            return redirect()->route('home')->with($failed);
+        }
+
+        if (empty($request->get('PayerID')) || empty($request->get('token')) || empty($request->get('paymentId'))) {
+            return redirect()->route('payment', $service->slug)->with($failed);
         }
 
         $payment_id=$request->get('paymentId');
-        $payment = Payment::get($payment_id, $this->apiContext);
-        $execution = new PaymentExecution();
-        $execution->setPayerId($request->get('PayerID'));
-        /**Execute the payment **/
-        $result = $payment->execute($execution, $this->apiContext);
-
-        if ($result->getState() == 'approved') {
-
-            $service = Service::where(['slug' => $service->slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
-            $user = Auth::guard('web')->user();
-            $order_info = Session::get('order_info');
-            $provider_id = $service->provider_id;
-            $client_id = $user->id;
-
-            $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Paypal', 'success', $payment_id);
-
-            $provider = $service->provider;
-            $this->sendMailToClient($user, $order);
-            $this->sendMailToProvider($provider, $order);
-
-            Session::forget('order_info');
-            Session::forget('return_from_mollie');
-            Session::forget('service');
-
-            $notification = trans('user_validation.Your order has been placed. Thanks for your new order');
-            $notification = array('messege'=>$notification,'alert-type'=>'success');
-            return redirect()->route('dashboard')->with($notification);
+        if(BookingPricing::transactionUsed('Paypal', $payment_id)){
+            return redirect()->route('payment', $service->slug)->with($failed);
         }
+
+        try {
+            $payment = Payment::get($payment_id, $this->apiContext);
+
+            // Only execute a payment that was created for this booking's amount.
+            $paypalSetting = PaypalPayment::first();
+            $transactions = $payment->getTransactions();
+            $paid_amount = $transactions ? $transactions[0]->getAmount()->getTotal() : null;
+            if(!BookingPricing::amountCovers($paid_amount, $this->payableAmount($service, $order_info, $paypalSetting))){
+                return redirect()->route('payment', $service->slug)->with($failed);
+            }
+
+            $execution = new PaymentExecution();
+            $execution->setPayerId($request->get('PayerID'));
+            /**Execute the payment **/
+            $result = $payment->execute($execution, $this->apiContext);
+        } catch (\Exception $ex) {
+            return redirect()->route('payment', $service->slug)->with($failed);
+        }
+
+        if ($result->getState() != 'approved') {
+            return redirect()->route('payment', $service->slug)->with($failed);
+        }
+
+        $user = Auth::guard('web')->user();
+        $provider_id = $service->provider_id;
+        $client_id = $user->id;
+
+        $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Paypal', 'success', $payment_id);
+
+        $provider = $service->provider;
+        $this->sendMailToClient($user, $order);
+        $this->sendMailToProvider($provider, $order);
+
+        Session::forget('order_info');
+        Session::forget('return_from_mollie');
+        Session::forget('service');
+
+        $notification = trans('user_validation.Your order has been placed. Thanks for your new order');
+        $notification = array('messege'=>$notification,'alert-type'=>'success');
+        return redirect()->route('dashboard')->with($notification);
     }
 
     public function paypalPaymentCancled(){
@@ -167,7 +196,24 @@ class PaypalController extends Controller
 
         $notification = trans('user_validation.Payment Faild');
         $notification = array('messege'=>$notification,'alert-type'=>'error');
+        if(!$service){
+            return redirect()->route('home')->with($notification);
+        }
         return redirect()->route('payment', $service->slug)->with($notification);
+    }
+
+    private function sessionOrder($service){
+        $order_info = Session::get('order_info');
+        if(!is_object($order_info) || ($order_info->service_id ?? null) != $service->id){
+            return null;
+        }
+
+        return $order_info;
+    }
+
+    private function payableAmount($service, $order_info, $paypalSetting){
+        $total = BookingPricing::totals($service, $order_info->extra_price, BookingPricing::sessionCoupon($service))->total;
+        return round($total * $paypalSetting->currency_rate, 2);
     }
 
 
@@ -178,11 +224,10 @@ class PaypalController extends Controller
         $additional_services = array();
         if($extra_services->ids){
             foreach($extra_services->ids as $index => $extra_service){
-                $addition = AdditionalService::find($extra_services->ids[$index]);
                 $single_extra_service = array(
                     'service_name' => $extra_services->names[$index],
                     'qty' => $extra_services->quantities[$index],
-                    'price' => ($extra_services->quantities[$index] * $addition->price),
+                    'price' => $extra_services->prices[$index],
                 );
                 $additional_services[] = $single_extra_service;
             }
@@ -193,15 +238,37 @@ class PaypalController extends Controller
         $order_note = $order_info->customer->order_note;
         $client_address = $order_info->customer;
 
+        $find_schedule = AppointmentSchedule::find($order_info->schedule_time_slot);
+        $time_slot = '';
+        if($find_schedule){
+            $time_slot = strtoupper(date('h:i A', strtotime($find_schedule->start_time))).' - '.strtoupper(date('h:i A', strtotime($find_schedule->end_time)));
+        }
+
+        $coupon = BookingPricing::sessionCoupon($service);
+        $totals = BookingPricing::totals($service, $additional_amount, $coupon);
+
+        if($coupon){
+            $history = new CouponHistory();
+            $history->user_id = $client_id;
+            $history->provider_id = $coupon->provider_id;
+            $history->coupon_code = $coupon->coupon_code;
+            $history->coupon_id = $coupon->id;
+            $history->discount_amount = $totals->discount;
+            $history->save();
+        }
+
         $order = new Order();
         $order->order_id = substr(rand(0,time()),0,10);
         $order->booking_date = $order_info->date;
+        $order->appointment_schedule_id = $order_info->schedule_time_slot;
+        $order->schedule_time_slot = $time_slot;
         $order->client_id = $client_id;
         $order->provider_id = $provider_id;
         $order->service_id = $service->id;
         $order->package_amount = $service->price;
         $order->additional_amount = $additional_amount;
-        $order->total_amount = ($service->price + $additional_amount);
+        $order->coupon_discount = $totals->discount;
+        $order->total_amount = $totals->total;
         $order->payment_method = $payment_method;
         $order->transection_id = $tnx_info;
         $order->payment_status = $payment_status;
@@ -211,6 +278,9 @@ class PaypalController extends Controller
         $order->order_note = $order_note;
         $order->client_address = json_encode($client_address);
         $order->save();
+
+        Session::forget('coupon_code');
+        Session::forget('offer_percentage');
 
         return $order;
     }

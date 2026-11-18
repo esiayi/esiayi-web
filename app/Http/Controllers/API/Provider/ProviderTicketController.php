@@ -26,7 +26,7 @@ class ProviderTicketController extends Controller
     }
 
     public function show($id){
-        $ticket = Ticket::with('user','order')->where('ticket_id', $id)->first();
+        $ticket = Ticket::with('user','order')->where(['ticket_id' => $id, 'user_id' => Auth::guard('api')->user()->id])->firstOrFail();
         TicketMessage::where('ticket_id', $ticket->id)->update(['unseen_user' => 1]);
         $messages = TicketMessage::where('ticket_id', $ticket->id)->get();
 
@@ -48,6 +48,7 @@ class ProviderTicketController extends Controller
 
         $user = Auth::guard('api')->user();
         $message = new TicketMessage();
+        Ticket::where(['id' => $request->ticket_id, 'user_id' => Auth::guard('api')->user()->id])->firstOrFail();
         $message->ticket_id = $request->ticket_id;
         $message->admin_id = 0;
         $message->user_id = $user->id;
@@ -109,6 +110,7 @@ class ProviderTicketController extends Controller
 
         $ticket = new Ticket();
         $ticket->user_id = $user->id;
+        Order::where(['id' => $request->order_id, 'provider_id' => Auth::guard('api')->user()->id])->firstOrFail();
         $ticket->order_id = $request->order_id;
         $ticket->subject = $request->subject;
         $ticket->ticket_id = substr(rand(0,time()),0,10);

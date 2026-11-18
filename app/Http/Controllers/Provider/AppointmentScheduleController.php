@@ -47,7 +47,7 @@ class AppointmentScheduleController extends Controller
         $rules = [
             'day'=>'required',
             'start_time'=>'required',
-            'end_time'=>'required',
+            'end_time'=>'required|after:start_time',
         ];
         $customMessages = [
             'day.required' => trans('user_validation.Day is required'),
@@ -82,7 +82,7 @@ class AppointmentScheduleController extends Controller
             'Saturday'
         );
 
-        $schedule = AppointmentSchedule::find($id);
+        $schedule = $this->ownedSchedule($id);
 
         return view('provider.edit_appointment_schedule')->with([
             'days' => $days,
@@ -97,7 +97,7 @@ class AppointmentScheduleController extends Controller
         $rules = [
             'day'=>'required',
             'start_time'=>'required',
-            'end_time'=>'required',
+            'end_time'=>'required|after:start_time',
         ];
         $customMessages = [
             'day.required' => trans('user_validation.Day is required'),
@@ -107,7 +107,7 @@ class AppointmentScheduleController extends Controller
 
         $this->validate($request, $rules, $customMessages);
 
-        $schedule = AppointmentSchedule::find($id);
+        $schedule = $this->ownedSchedule($id);
         $schedule->user_id = $auth_user->id;
         $schedule->day = $request->day;
         $schedule->start_time = $request->start_time;
@@ -124,7 +124,7 @@ class AppointmentScheduleController extends Controller
     public function destroy($id){
         $exist = Order::where('appointment_schedule_id', $id)->count();
         if($exist == 9){
-            $schedule = AppointmentSchedule::find($id);
+            $schedule = $this->ownedSchedule($id);
             $schedule->delete();
 
             $notification= trans('user_validation.Deleted Successfully');
@@ -139,4 +139,10 @@ class AppointmentScheduleController extends Controller
 
     }
 
+    /**
+     * A schedule that belongs to the logged-in provider, or a 404.
+     */
+    private function ownedSchedule($id){
+        return AppointmentSchedule::where(['id' => $id, 'user_id' => Auth::guard('web')->user()->id])->firstOrFail();
+    }
 }
