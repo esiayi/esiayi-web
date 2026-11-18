@@ -63,7 +63,7 @@ class PaypalController extends Controller
         $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
         $order_info = Session::get('order_info');
         if(!$service || !is_object($order_info)){
-            return response()->json(['is_available' => false, 'message' => trans('user_validation.Please select a schedule')]);
+            return response()->json(['is_available' => false, 'message' => trans('user.Please select a schedule')]);
         }
 
         $exist = $this->checkAvaibalityBeforPayment($service, $order_info->date, $order_info->schedule_time_slot);

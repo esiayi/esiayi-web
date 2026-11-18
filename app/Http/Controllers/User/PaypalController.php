@@ -73,7 +73,7 @@ class PaypalController extends Controller
 
         $order_info = $this->sessionOrder($service);
         if(!$order_info){
-            $notification = trans('user_validation.Please select a schedule');
+            $notification = trans('user.Please select a schedule');
             $notification = array('messege'=>$notification,'alert-type'=>'error');
             return redirect()->route('ready-to-booking', $service->slug)->with($notification);
         }

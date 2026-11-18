@@ -342,7 +342,7 @@ class PaymentController extends Controller
 
         $order_info = $this->sessionOrder($service);
         if(!$order_info){
-            $notification = trans('user_validation.Please select a schedule');
+            $notification = trans('user.Please select a schedule');
             $notification = array('messege'=>$notification,'alert-type'=>'error');
             return redirect()->route('ready-to-booking', $service->slug)->with($notification);
         }
@@ -426,7 +426,7 @@ class PaymentController extends Controller
     }
 
     private function missingBooking($service){
-        $notification = trans('user_validation.Please select a schedule');
+        $notification = trans('user.Please select a schedule');
         $notification = array('messege'=>$notification,'alert-type'=>'error');
         return redirect()->route('ready-to-booking', $service->slug)->with($notification);
     }
@@ -437,7 +437,7 @@ class PaymentController extends Controller
         $order_info = $service ? $this->sessionOrder($service) : null;
 
         if(!$order_info){
-            return response()->json(['is_available' => false, 'message' => trans('user_validation.Please select a schedule')]);
+            return response()->json(['is_available' => false, 'message' => trans('user.Please select a schedule')]);
         }
 
         $exist = $this->checkAvaibalityBeforPayment($service, $order_info->date, $order_info->schedule_time_slot);
