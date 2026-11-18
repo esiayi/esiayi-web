@@ -1346,7 +1346,7 @@ class HomeController extends Controller
     public function provider(Request $request, $user_name){
         $breadcrumb = BreadcrumbImage::where(['id' => 9])->first();
 
-        $provider = User::where(['user_name' => $user_name])->select('id','name','user_name','phone','email','image','created_at','designation','address')->first();
+        $provider = User::where(['user_name' => $user_name, 'is_provider' => 1, 'status' => 1])->select('id','name','user_name','phone','email','image','created_at','designation','address')->firstOrFail();
 
         $setting = Setting::first();
         $default_avatar = (object) array('image' => $setting->default_avatar);
