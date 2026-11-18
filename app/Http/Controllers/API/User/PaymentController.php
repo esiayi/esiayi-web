@@ -545,6 +545,62 @@ class PaymentController extends Controller
         return response()->json(['message' => $notification]);
     }
 
+    /**
+     * Card payments from the app, step 1: price the booking on the server and create a
+     * Stripe PaymentIntent. The app confirms it with Stripe's SDK on the device (which also
+     * handles 3-D Secure), so card details never reach this server, then calls
+     * pay-with-stripe with the payment_intent_id.
+     */
+    public function createStripePaymentIntent(Request $request, $slug){
+        if(env('APP_MODE') == 'DEMO'){
+            $notification = trans('user_validation.This Is Demo Version. You Can Not Change Anything');
+            return response()->json(['message' => $notification], 403);
+        }
+
+        $stripe = StripePayment::first();
+        if(!$stripe || $stripe->status != 1){
+            return response()->json(['message' => __('Card payments are not available.')], 403);
+        }
+
+        $booking = $this->appBooking($request, $slug);
+        if($booking instanceof \Illuminate\Http\JsonResponse){
+            return $booking;
+        }
+        [$service, $order_info, $user] = $booking;
+
+        Stripe\Stripe::setApiKey($stripe->stripe_secret);
+        try {
+            $intent = Stripe\PaymentIntent::create([
+                'amount' => $this->stripeMinorAmount($order_info->total_price, $stripe),
+                'currency' => strtolower($stripe->currency_code),
+                'automatic_payment_methods' => ['enabled' => true],
+                'description' => (string) env('APP_NAME'),
+                'metadata' => [
+                    'service_id' => $service->id,
+                    'user_id' => $user->id,
+                    'booking_date' => $order_info->date,
+                    'schedule_time_slot' => $order_info->schedule_time_slot,
+                ],
+            ]);
+        } catch (Exception $e) {
+            return response()->json(['message' => trans('user_validation.Payment Faild')], 403);
+        }
+
+        return response()->json([
+            'payment_intent_id' => $intent->id,
+            'client_secret' => $intent->client_secret,
+            'publishable_key' => $stripe->stripe_key,
+            'amount' => $intent->amount,
+            'currency' => $intent->currency,
+        ]);
+    }
+
+    /**
+     * Card payments from the app, step 2: with payment_intent_id, check the PaymentIntent
+     * with Stripe and place the order. The old flow, where the app posts raw card details
+     * for the server to tokenise, only runs if STRIPE_ALLOW_RAW_CARD_API=true, because it
+     * puts card data on this server (and most Stripe accounts reject it anyway).
+     */
     public function payWithStripe(Request $request, $slug){
 
         if(env('APP_MODE') == 'DEMO'){
@@ -552,138 +608,90 @@ class PaymentController extends Controller
             return response()->json(['message' => $notification], 403);
         }
 
-        $rules = [
-            'tnx_info'=>'required',
-            'name'=>'required',
-            'phone'=>'required',
-            'address'=>'required',
-            'date'=>'required',
-            'schedule_time_slot'=>'required',
-            'card_number'=>'required',
-            'year'=>'required',
-            'month'=>'required',
-            'cvc'=>'required',
-        ];
-
-        $customMessages = [
-            'tnx_info.required' => trans('user_validation.Transaction is required'),
-            'name.required' => trans('user_validation.Name is required'),
-            'phone.required' => trans('user_validation.Phone is required'),
-            'address.required' => trans('user_validation.Address is required'),
-            'date.required' => trans('user_validation.Date is required'),
-            'schedule_time_slot.required' => trans('user_validation.Schedule is required'),
-            'card_number.required' => trans('user_validation.Card number is required'),
-            'year.required' => trans('user_validation.Year is required'),
-            'month.required' => trans('user_validation.Month is required'),
-            'cvc.required' => trans('user_validation.Cvc is required'),
-        ];
-        $this->validate($request, $rules,$customMessages);
-
-        $customer = (object) array(
-            'name' => $request->name,
-            'email' => $request->email,
-            'phone' => $request->phone,
-            'address' => $request->address,
-            'post_code' => $request->post_code,
-            'order_note' => $request->order_note,
-        );
-
-        $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
-        if(!$service){
-            return response()->json(['message' => trans('user.Service Not Found')],403);
+        $legacyCard = !$request->filled('payment_intent_id');
+        if($legacyCard && !config('services.stripe.allow_raw_card_api')){
+            return response()->json(['message' => __('Please update the app to pay by card.')], 422);
         }
 
-        $what_you_will_get = array();
-        if($service->what_you_will_provide){
-            $provides = json_decode($service->what_you_will_provide);
-            foreach($provides as $provide){
-                $what_you_will_get [] = $provide;
-            }
+        if($legacyCard){
+            $this->validate($request, [
+                'card_number'=>'required',
+                'year'=>'required',
+                'month'=>'required',
+                'cvc'=>'required',
+            ], [
+                'card_number.required' => trans('user_validation.Card number is required'),
+                'year.required' => trans('user_validation.Year is required'),
+                'month.required' => trans('user_validation.Month is required'),
+                'cvc.required' => trans('user_validation.Cvc is required'),
+            ]);
         }
 
-        $benifits = array();
-        if($service->benifit){
-            $exist_benifits = json_decode($service->benifit);
-            foreach($exist_benifits as $exist_benifit){
-                $benifits [] = $exist_benifit;
-            }
+        $booking = $this->appBooking($request, $slug);
+        if($booking instanceof \Illuminate\Http\JsonResponse){
+            return $booking;
         }
-
-        $package_features = array();
-        if($service->package_features){
-            $features = json_decode($service->package_features);
-            foreach($features as $feature){
-                $package_features [] = $feature;
-            }
-        }
-
-        // Add-on prices come from the database; prices sent by the app are ignored.
-        $extras = BookingPricing::extras($service, $request->ids, $request->quantities);
-        $extra_price = $extras->extra_price;
-        $booking_date = BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
-
-        $total_price = $service->price + $extra_price;
-
-        $order_info = (object) array(
-            'customer' => $customer,
-            'extras' => $extras,
-            'what_you_will_get' => $what_you_will_get,
-            'benifits' => $benifits,
-            'package_features' => $package_features,
-            'extra_price' => $extra_price,
-            'total_price' => $total_price,
-            'package_price' => $service->price,
-            'service_id' => $service->id,
-            'date' => $booking_date,
-            'schedule_time_slot' => $request->schedule_time_slot,
-        );
-
-        $user = Auth::guard('api')->user();
+        [$service, $order_info, $user] = $booking;
         $provider_id = $service->provider_id;
         $client_id = $user->id;
 
-        $exist = $this->checkAvaibalityBeforPayment($service, $order_info->date, $order_info->schedule_time_slot);
-
-        if($exist > 0){
-            $notification = trans('user_validation.This schedule already booked. please choose another schedule');
-            return response()->json(['message' => $notification], 403);
-        }
-
         $stripe = StripePayment::first();
-        $payableAmount = round($total_price * $stripe->currency_rate,2);
+        $expected = $this->stripeMinorAmount($order_info->total_price, $stripe);
         Stripe\Stripe::setApiKey($stripe->stripe_secret);
 
-        try{
-            $token = Stripe\Token::create([
-                'card' => [
-                    'number' => $request->card_number,
-                    'exp_month' => $request->month,
-                    'exp_year' => $request->year,
-                    'cvc' => $request->cvc,
-                ],
+        if(!$legacyCard){
+            try {
+                $intent = Stripe\PaymentIntent::retrieve($request->payment_intent_id);
+            } catch (Exception $e) {
+                return response()->json(['error' => 'Payment faild'],403);
+            }
+
+            // The intent must be paid in full, for this customer's booking, and not used before.
+            $paid = $intent->status === 'succeeded'
+                && (int) $intent->amount_received >= $expected
+                && strtolower($intent->currency) === strtolower($stripe->currency_code)
+                && (string) ($intent->metadata['service_id'] ?? '') === (string) $service->id
+                && (string) ($intent->metadata['user_id'] ?? '') === (string) $user->id
+                && (string) ($intent->metadata['booking_date'] ?? '') === (string) $order_info->date
+                && (string) ($intent->metadata['schedule_time_slot'] ?? '') === (string) $order_info->schedule_time_slot
+                && !BookingPricing::transactionUsed('Stripe', $intent->id);
+
+            if(!$paid){
+                return response()->json(['error' => 'Payment faild'],403);
+            }
+            $transaction = $intent->id;
+        }else{
+            try{
+                $token = Stripe\Token::create([
+                    'card' => [
+                        'number' => $request->card_number,
+                        'exp_month' => $request->month,
+                        'exp_year' => $request->year,
+                        'cvc' => $request->cvc,
+                    ],
+                ]);
+            }catch (Exception $e) {
+                return response()->json(['error' => 'Please provide valid card information'],403);
+            }
+
+            if (!isset($token['id'])) {
+                return response()->json(['error' => 'Payment faild'],403);
+            }
+
+            $result = Stripe\Charge::create([
+                'card' => $token['id'],
+                'currency' => $stripe->currency_code,
+                'amount' => $expected,
+                'description' => env('APP_NAME'),
             ]);
-        }catch (Exception $e) {
-            return response()->json(['error' => 'Please provide valid card information'],403);
+
+            if($result['status'] != 'succeeded') {
+                return response()->json(['error' => 'Payment faild'],403);
+            }
+            $transaction = $result['balance_transaction'];
         }
 
-        if (!isset($token['id'])) {
-            return response()->json(['error' => 'Payment faild'],403);
-        }
-
-        $result = Stripe\Charge::create([
-            'card' => $token['id'],
-            'currency' => $stripe->currency_code,
-            'amount' => (int) round($payableAmount * 100),
-            'description' => env('APP_NAME'),
-        ]);
-
-
-        if($result['status'] != 'succeeded') {
-            return response()->json(['error' => 'Payment faild'],403);
-        }
-
-
-        $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Stripe', 'success', $result['balance_transaction']);
+        $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Stripe', 'success', $transaction);
 
         $provider = $service->provider;
         $this->sendMailToClient($user, $order);
@@ -694,6 +702,69 @@ class PaymentController extends Controller
         $notification = trans('user_validation.Your order has been placed. Thanks for your new order');
         return response()->json(['message' => $notification]);
 
+    }
+
+    /**
+     * Validate and price an app booking request (customer details, date, slot, add-ons).
+     *
+     * @return array{0: Service, 1: object, 2: \App\Models\User}|\Illuminate\Http\JsonResponse
+     */
+    private function appBooking(Request $request, $slug){
+        $this->validate($request, [
+            'name'=>'required',
+            'phone'=>'required',
+            'address'=>'required',
+            'date'=>'required',
+            'schedule_time_slot'=>'required',
+        ], [
+            'name.required' => trans('user_validation.Name is required'),
+            'phone.required' => trans('user_validation.Phone is required'),
+            'address.required' => trans('user_validation.Address is required'),
+            'date.required' => trans('user_validation.Date is required'),
+            'schedule_time_slot.required' => trans('user_validation.Schedule is required'),
+        ]);
+
+        $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
+        if(!$service){
+            return response()->json(['message' => trans('user.Service Not Found')],403);
+        }
+
+        // Add-on prices come from the database; prices sent by the app are ignored.
+        $extras = BookingPricing::extras($service, $request->ids, $request->quantities);
+        $booking_date = BookingPricing::slot($service, $request->date, $request->schedule_time_slot);
+
+        $order_info = (object) array(
+            'customer' => (object) array(
+                'name' => $request->name,
+                'email' => $request->email,
+                'phone' => $request->phone,
+                'address' => $request->address,
+                'post_code' => $request->post_code,
+                'order_note' => $request->order_note,
+            ),
+            'extras' => $extras,
+            'what_you_will_get' => json_decode($service->what_you_will_provide ?: '[]'),
+            'benifits' => json_decode($service->benifit ?: '[]'),
+            'package_features' => json_decode($service->package_features ?: '[]'),
+            'extra_price' => $extras->extra_price,
+            'total_price' => $service->price + $extras->extra_price,
+            'package_price' => $service->price,
+            'service_id' => $service->id,
+            'date' => $booking_date,
+            'schedule_time_slot' => $request->schedule_time_slot,
+        );
+
+        if($this->checkAvaibalityBeforPayment($service, $order_info->date, $order_info->schedule_time_slot) > 0){
+            $notification = trans('user_validation.This schedule already booked. please choose another schedule');
+            return response()->json(['message' => $notification], 403);
+        }
+
+        return [$service, $order_info, Auth::guard('api')->user()];
+    }
+
+    /** Amount in the Stripe currency's minor unit (pence/cents). */
+    private function stripeMinorAmount($total, $stripe){
+        return (int) round(round($total * $stripe->currency_rate, 2) * 100);
     }
 
     public function payWithInstamojo(Request $request, $slug){
