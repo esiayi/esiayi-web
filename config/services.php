@@ -43,4 +43,11 @@ return [
         'redirect' => '',
     ],
 
+    'stripe' => [
+        // The mobile app used to post raw card details for the server to tokenise. Leave this
+        // off: card data then never touches this server. Turn it on only while an old app
+        // version that cannot do PaymentIntents is still in use (and Stripe allows it).
+        'allow_raw_card_api' => env('STRIPE_ALLOW_RAW_CARD_API', false),
+    ],
+
 ];

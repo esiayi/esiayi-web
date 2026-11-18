@@ -74,6 +74,7 @@ Route::group(['middleware' => ['demo','XSS']], function () {
         Route::get('/booking-information/{slug}', [PaymentController::class, 'booking_information'])->name('booking-information');
         Route::post('/payment/{slug}', [PaymentController::class, 'payment'])->name('payment');
         Route::post('/bank-payment/{slug}', [PaymentController::class, 'bankPayment'])->name('bank-payment');
+        Route::post('/stripe/payment-intent/{slug}', [PaymentController::class, 'createStripePaymentIntent'])->name('stripe-payment-intent');
         Route::post('/pay-with-stripe/{slug}', [PaymentController::class, 'payWithStripe'])->name('pay-with-stripe');
 
         Route::get('/pay-with-instamojo/{slug}', [PaymentController::class, 'payWithInstamojo'])->name('pay-with-instamojo');

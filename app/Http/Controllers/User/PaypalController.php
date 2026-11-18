@@ -4,17 +4,6 @@ namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use PayPal\Api\Amount;
-use PayPal\Api\Details;
-use PayPal\Api\Item;
-use PayPal\Api\ItemList;
-use PayPal\Api\Payer;
-use PayPal\Api\Payment;
-use PayPal\Api\RedirectUrls;
-use PayPal\Api\Transaction;
-use PayPal\Rest\ApiContext;
-use PayPal\Auth\OAuthTokenCredential;
-use PayPal\Api\PaymentExecution;
 
 use App\Mail\OrderSuccessfully;
 use App\Helpers\MailHelper;
@@ -28,6 +17,8 @@ use App\Models\Setting;
 use App\Models\AppointmentSchedule;
 use App\Models\CouponHistory;
 use App\Services\BookingPricing;
+use App\Services\PayPalCheckout;
+use Illuminate\Support\Facades\Cache;
 
 use Str;
 use Cart;
@@ -38,28 +29,6 @@ use Auth;
 
 class PaypalController extends Controller
 {
-    private $apiContext;
-    public function __construct()
-    {
-        $account = PaypalPayment::first();
-        $paypal_conf = \Config::get('paypal');
-        $this->apiContext = new ApiContext(new OAuthTokenCredential(
-            $account->client_id,
-            $account->secret_id,
-            )
-        );
-
-        $setting=array(
-            'mode' => $account->account_mode,
-            'http.ConnectionTimeOut' => 30,
-            'log.LogEnabled' => true,
-            'log.FileName' => storage_path() . '/logs/paypal.log',
-            'log.LogLevel' => 'ERROR'
-        );
-        $this->apiContext->setConfig($setting);
-    }
-
-
     public function payWithPaypal($slug){
         if(env('APP_MODE') == 'DEMO'){
             $notification = trans('user_validation.This Is Demo Version. You Can Not Change Anything');
@@ -79,52 +48,28 @@ class PaypalController extends Controller
         }
 
         $paypalSetting = PaypalPayment::first();
-        $payableAmount = $this->payableAmount($service, $order_info, $paypalSetting);
+        $amount = $this->payableAmount($service, $order_info, $paypalSetting);
 
-        $name=env('APP_NAME');
-
-        // set payer
-        $payer = new Payer();
-        $payer->setPaymentMethod("paypal");
-
-        // set amount total
-        $amount = new Amount();
-        $amount->setCurrency($paypalSetting->currency_code)
-            ->setTotal($payableAmount);
-
-        // transaction
-        $transaction = new Transaction();
-        $transaction->setAmount($amount)
-            ->setDescription(env('APP_NAME'));
-
-        // redirect url
-        $redirectUrls = new RedirectUrls();
-
-        $root_url=url('/');
-        $redirectUrls->setReturnUrl(route('paypal-payment-success'))
-            ->setCancelUrl(route('paypal-payment-cancled'));
-
-        // payment
-        $payment = new Payment();
-        $payment->setIntent("sale")
-            ->setPayer($payer)
-            ->setRedirectUrls($redirectUrls)
-            ->setTransactions(array($transaction));
         try {
-            $payment->create($this->apiContext);
-        } catch (\PayPal\Exception\PPConnectionException $ex) {
-
+            $paypal = PayPalCheckout::fromSettings();
+            $paypalOrder = $paypal->createOrder($amount, route('paypal-payment-success'), route('paypal-payment-cancled'), (string) config('app.name'));
+        } catch (\Exception $ex) {
             $notification = trans('user_validation.Payment Faild');
             $notification = array('messege'=>$notification,'alert-type'=>'error');
             return redirect()->back()->with($notification);
         }
 
-        // get paymentlink
-        $approvalUrl = $payment->getApprovalLink();
-
+        // Remember exactly what this PayPal order pays for, so the booking created on return
+        // is the one priced here even if the customer changes the booking in another tab.
         Session::put('service', $service);
+        Session::put('paypal_checkout', [
+            'order_id' => $paypalOrder['id'],
+            'amount' => $amount,
+            'currency' => $paypal->currency(),
+            'order_info' => $order_info,
+        ]);
 
-        return redirect($approvalUrl);
+        return redirect($paypalOrder['approve_url']);
     }
 
     public function paypalPaymentSuccess(Request $request){
@@ -132,62 +77,55 @@ class PaypalController extends Controller
         Session::put('return_from_mollie','payment_faild');
         $session_service = Session::get('service');
         $service = $session_service ? Service::where(['slug' => $session_service->slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first() : null;
-        $order_info = $service ? $this->sessionOrder($service) : null;
+        $checkout = Session::get('paypal_checkout');
 
         $failed = array('messege'=>trans('user_validation.Payment Faild'),'alert-type'=>'error');
-        if(!$order_info){
-            return redirect()->route('home')->with($failed);
-        }
+        $paypal_order_id = (string) $request->query('token');
 
-        if (empty($request->get('PayerID')) || empty($request->get('token')) || empty($request->get('paymentId'))) {
-            return redirect()->route('payment', $service->slug)->with($failed);
-        }
-
-        $payment_id=$request->get('paymentId');
-        if(BookingPricing::transactionUsed('Paypal', $payment_id)){
-            return redirect()->route('payment', $service->slug)->with($failed);
+        // PayPal returns ?token={order id}; it must be the order this session created.
+        if(!$service || !is_array($checkout) || !$paypal_order_id || $paypal_order_id !== $checkout['order_id']
+            || ($checkout['order_info']->service_id ?? null) != $service->id){
+            return $service ? redirect()->route('payment', $service->slug)->with($failed) : redirect()->route('home')->with($failed);
         }
 
         try {
-            $payment = Payment::get($payment_id, $this->apiContext);
+            // One request at a time per PayPal order, so a double submit cannot book twice.
+            return Cache::lock('paypal-order:'.$paypal_order_id, 60)->block(15, function () use ($service, $checkout, $paypal_order_id, $failed) {
+                $placed = array('messege'=>trans('user_validation.Your order has been placed. Thanks for your new order'),'alert-type'=>'success');
+                if(BookingPricing::transactionUsed('Paypal', $paypal_order_id)){
+                    return redirect()->route('dashboard')->with($placed);
+                }
 
-            // Only execute a payment that was created for this booking's amount.
-            $paypalSetting = PaypalPayment::first();
-            $transactions = $payment->getTransactions();
-            $paid_amount = $transactions ? $transactions[0]->getAmount()->getTotal() : null;
-            if(!BookingPricing::amountCovers($paid_amount, $this->payableAmount($service, $order_info, $paypalSetting))){
-                return redirect()->route('payment', $service->slug)->with($failed);
-            }
+                $paypal = PayPalCheckout::fromSettings();
 
-            $execution = new PaymentExecution();
-            $execution->setPayerId($request->get('PayerID'));
-            /**Execute the payment **/
-            $result = $payment->execute($execution, $this->apiContext);
+                // Check the order before capturing it, while no money has moved.
+                $order = $paypal->getOrder($paypal_order_id);
+                if(!in_array($order['status'], ['APPROVED', 'COMPLETED'], true) || $order['currency'] !== $checkout['currency']
+                    || !BookingPricing::amountCovers($order['amount'], $checkout['amount'])){
+                    return redirect()->route('payment', $service->slug)->with($failed);
+                }
+
+                $capture = $paypal->captureOrder($paypal_order_id);
+                if($capture['currency'] !== $checkout['currency'] || !BookingPricing::amountCovers($capture['amount'], $checkout['amount'])){
+                    $paypal->refundCapture($capture['capture_id']);
+                    return redirect()->route('payment', $service->slug)->with($failed);
+                }
+
+                $user = Auth::guard('web')->user();
+                // A PENDING capture is paid but held by PayPal; admins approve it like a bank transfer.
+                $payment_status = $capture['status'] === 'COMPLETED' ? 'success' : 'pending';
+                $order = $this->createOrder($user, $service, $checkout['order_info'], $service->provider_id, $user->id, 'Paypal', $payment_status, $paypal_order_id);
+
+                $this->sendMailToClient($user, $order);
+                $this->sendMailToProvider($service->provider, $order);
+
+                Session::forget(['order_info', 'return_from_mollie', 'service', 'paypal_checkout']);
+
+                return redirect()->route('dashboard')->with($placed);
+            });
         } catch (\Exception $ex) {
             return redirect()->route('payment', $service->slug)->with($failed);
         }
-
-        if ($result->getState() != 'approved') {
-            return redirect()->route('payment', $service->slug)->with($failed);
-        }
-
-        $user = Auth::guard('web')->user();
-        $provider_id = $service->provider_id;
-        $client_id = $user->id;
-
-        $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Paypal', 'success', $payment_id);
-
-        $provider = $service->provider;
-        $this->sendMailToClient($user, $order);
-        $this->sendMailToProvider($provider, $order);
-
-        Session::forget('order_info');
-        Session::forget('return_from_mollie');
-        Session::forget('service');
-
-        $notification = trans('user_validation.Your order has been placed. Thanks for your new order');
-        $notification = array('messege'=>$notification,'alert-type'=>'success');
-        return redirect()->route('dashboard')->with($notification);
     }
 
     public function paypalPaymentCancled(){
