@@ -35,8 +35,8 @@ class CouponController extends Controller
     public function store(Request $request){
         $rules = [
             'coupon_code'=>'required|unique:coupons',
-            'offer_percentage'=>'required',
-            'expired_date'=>'required',
+            'offer_percentage'=>'required|numeric|min:1|max:100',
+            'expired_date'=>'required|date',
         ];
         $customMessages = [
             'coupon_code.required' => trans('user_validation.Coupon code is required'),
@@ -64,8 +64,8 @@ class CouponController extends Controller
     public function update(Request $request, $id){
         $rules = [
             'coupon_code'=>'required|unique:coupons,coupon_code,'.$id,
-            'offer_percentage'=>'required',
-            'expired_date'=>'required',
+            'offer_percentage'=>'required|numeric|min:1|max:100',
+            'expired_date'=>'required|date',
         ];
         $customMessages = [
             'coupon_code.required' => trans('user_validation.Coupon code is required'),

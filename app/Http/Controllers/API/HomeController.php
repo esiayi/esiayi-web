@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
@@ -61,7 +61,6 @@ use App\Models\RazorpayPayment;
 use App\Models\Flutterwave;
 use App\Models\PaystackAndMollie;
 use App\Models\InstamojoPayment;
-use App\Models\PaymongoPayment;
 use App\Models\BankPayment;
 
 class HomeController extends Controller
@@ -578,7 +577,7 @@ class HomeController extends Controller
             'state'=>'required',
             'service_area'=>'required',
             'address'=>'required',
-            'password'=>'required|confirmed|min:4',
+            'password'=>'required|confirmed|min:8',
             'g-recaptcha-response'=>new Captcha()
         ];
         $customMessages = [
@@ -594,7 +593,7 @@ class HomeController extends Controller
             'designation.required' => trans('user_validation.Desgination is required'),
             'address.required' => trans('user_validation.Address is required'),
             'password.required' => trans('user_validation.Password is required'),
-            'password.min' => trans('user_validation.Password must be 4 characters'),
+            'password.min' => __('Password must be at least 8 characters.'),
             'password.confirmed' => trans('user_validation.Confrim password does not match'),
         ];
         $this->validate($request, $rules,$customMessages);
@@ -1492,7 +1491,7 @@ class HomeController extends Controller
 
         $complete_order = Order::where('order_status','complete')->where('provider_id', $provider->id)->count();
 
-        $canceled_order = Order::where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client')->count();
+        $canceled_order = Order::where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])->count();
 
         $total_review = Review::where(['provider_id' =>  $provider->id, 'status' => 1])->count();
 

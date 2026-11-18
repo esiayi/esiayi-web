@@ -4,7 +4,7 @@
     <title>{{__('user.Join as provider')}}</title>
 @endsection
 
-@section('title')
+@section('meta')
     <meta name="description" content="{{__('user.Join as provider')}}">
 @endsection
 

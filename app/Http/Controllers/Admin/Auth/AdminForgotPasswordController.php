@@ -76,13 +76,13 @@ class AdminForgotPasswordController extends Controller
 
         $rules = [
             'email'=>'required',
-            'password'=>'required|confirmed|min:4'
+            'password'=>'required|confirmed|min:8'
         ];
         $customMessages = [
             'email.required' => trans('admin_validation.Email is required'),
             'password.required' => trans('admin_validation.Password is required'),
             'password.confirmed' => trans('admin_validation.Password deos not match'),
-            'password.min' => trans('admin_validation.Password must be 4 characters'),
+            'password.min' => __('Password must be at least 8 characters.'),
         ];
         $this->validate($request, $rules,$customMessages);
 

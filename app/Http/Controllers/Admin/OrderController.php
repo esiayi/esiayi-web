@@ -152,7 +152,7 @@ class OrderController extends Controller
 
     public function declineBooking(Request $request){
         Paginator::useBootstrap();
-        $orders = Order::with('client','provider')->orderBy('id','desc')->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client');
+        $orders = Order::with('client','provider')->orderBy('id','desc')->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client']);
 
         if($request->provider){
             $orders = $orders->where('provider_id', $request->provider);
@@ -313,7 +313,11 @@ class OrderController extends Controller
 
 
     public function bookingCompleteRequest($id){
-        $order = Order::find($id);
+        $order = Order::findOrFail($id);
+        if($order->payment_status != 'success'){
+            $notification = array('messege'=>__('Approve the payment before marking this booking as complete.'),'alert-type'=>'error');
+            return redirect()->back()->with($notification);
+        }
         $order->order_status = 'complete';
         $order->complete_by_admin = 'Yes';
         $order->save();

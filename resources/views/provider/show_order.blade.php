@@ -35,7 +35,7 @@
                                 @if ($order->order_note)
                                 <h6 class="mt-4">{{__('user.Booking Note')}}</h6>
                                 <hr>
-                                    <p>{!! html_decode(clean(nl2br($order->order_note))) !!}</p>
+                                    <p>{!! clean(nl2br(html_decode($order->order_note))) !!}</p>
                                 @endif
 
                                 <h6 class="mt-4">{{__('user.Client Details')}}</h6>
@@ -117,9 +117,13 @@
                                 @endif
 
                                 @if ($order->order_status == 'awaiting_for_provider_approval')
-                                        <a href="javascript:;"  data-toggle="modal" data-target="#approvedOrder-{{ $order->id }}" class="btn btn-primary btn-sm"><i class="fas fa-check"></i> {{__('user.Approved')}}</a>
+                                        @if ($order->payment_status == 'success')
+                                            <a href="javascript:;"  data-toggle="modal" data-target="#approvedOrder-{{ $order->id }}" class="btn btn-primary btn-sm"><i class="fas fa-check"></i> {{ __('Accept') }}</a>
+                                        @else
+                                            <span class="badge badge-warning">{{ __('Awaiting payment') }}</span>
+                                        @endif
 
-                                        <a href="javascript:;" data-toggle="modal" data-target="#declinedOrder-{{ $order->id }}" class="btn btn-danger btn-sm"><i class="fas fa-times"></i> {{__('user.Declined')}}</a>
+                                        <a href="javascript:;" data-toggle="modal" data-target="#declinedOrder-{{ $order->id }}" class="btn btn-danger btn-sm"><i class="fas fa-times"></i> {{ __('Decline') }}</a>
                                 @endif
 
                                 @if (!$completeRequest && $order->order_status != 'complete')

@@ -201,13 +201,13 @@ class LoginController extends Controller
     public function storeResetPasswordPage(Request $request, $token){
         $rules = [
             'email'=>'required',
-            'password'=>'required|min:4|confirmed',
+            'password'=>'required|min:8|confirmed',
             'g-recaptcha-response'=>new Captcha()
         ];
         $customMessages = [
             'email.required' => trans('user_validation.Email is required'),
             'password.required' => trans('user_validation.Password is required'),
-            'password.min' => trans('user_validation.Password must be 4 characters'),
+            'password.min' => __('Password must be at least 8 characters.'),
             'password.confirmed' => trans('user_validation.Confirm password does not match'),
         ];
         $this->validate($request, $rules,$customMessages);

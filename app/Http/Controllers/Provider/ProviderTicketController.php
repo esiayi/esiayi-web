@@ -27,7 +27,7 @@ class ProviderTicketController extends Controller
     }
 
     public function show($id){
-        $ticket = Ticket::with('user','order')->where('ticket_id', $id)->first();
+        $ticket = Ticket::with('user','order')->where(['ticket_id' => $id, 'user_id' => Auth::guard('web')->user()->id])->firstOrFail();
         TicketMessage::where('ticket_id', $ticket->id)->update(['unseen_user' => 1]);
         $messages = TicketMessage::where('ticket_id', $ticket->id)->get();
         return view('provider.show_ticket', compact('ticket','messages'));
@@ -48,6 +48,7 @@ class ProviderTicketController extends Controller
         $this->validate($request, $rules,$customMessages);
 
         $user = Auth::guard('web')->user();
+        Ticket::where(['id' => $request->ticket_id, 'user_id' => $user->id])->firstOrFail();
         $message = new TicketMessage();
         $message->ticket_id = $request->ticket_id;
         $message->admin_id = 0;
@@ -106,6 +107,7 @@ class ProviderTicketController extends Controller
         $this->validate($request, $rules,$customMessages);
 
         $user = Auth::guard('web')->user();
+        Order::where(['id' => $request->order_id, 'provider_id' => $user->id])->firstOrFail();
 
         $ticket = new Ticket();
         $ticket->user_id = $user->id;

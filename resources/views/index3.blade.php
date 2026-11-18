@@ -4,7 +4,7 @@
     <title>{{ $seo_setting->seo_title }}</title>
 @endsection
 
-@section('title')
+@section('meta')
     <meta name="description" content="{{ $seo_setting->seo_description }}">
 @endsection
 @section('frontend-content')
@@ -80,7 +80,7 @@
                                 <div class="col-xl-2 col-sm-6 col-md-4 col-lg-3">
                                     <div class="wsus__single_brand">
                                         <a href="{{ $partner->link ? $partner->link : 'javascript:;' }}">
-                                            <img src="{{ asset($partner->logo) }}" alt="brand" class="img-fluid w-100">
+                                            <img loading="lazy" src="{{ asset($partner->logo) }}" alt="brand" class="img-fluid w-100">
                                         </a>
                                     </div>
                                 </div>
@@ -116,10 +116,10 @@
                     <div class="col-xl-2">
                         <div class="wsus__single_categories">
                             <div class="wsus__single_cat_img">
-                                <img src="{{ asset($category->image) }}" alt="category" class="img-fluid w-100">
+                                <img loading="lazy" src="{{ asset($category->image) }}" alt="category" class="img-fluid w-100">
                             </div>
                             <span>
-                                <img src="{{ asset($category->icon) }}" alt="categories" class="img-fluid w-100">
+                                <img loading="lazy" src="{{ asset($category->icon) }}" alt="categories" class="img-fluid w-100">
                             </span>
                             <a href="{{ route('services',['category' => $category->slug]) }}">{{ $category->name }}</a>
                             <p>{{ $category->totalService }}+ {{__('user.Services')}}</p>
@@ -154,7 +154,7 @@
                     <div class="col-xl-4">
                         <div class="wsus__single_services">
                             <div class="wsus__services_img">
-                                <img src="{{ asset($featured_service->image) }}" alt="service" class="img-fluid w-100">
+                                <img loading="lazy" src="{{ asset($featured_service->image) }}" alt="service" class="img-fluid w-100">
                             </div>
                             <div class="wsus__services_text">
                                 <ul class="d-flex justify-content-between">
@@ -165,7 +165,7 @@
                                 <div
                                     class="single_service_footer d-flex flex-wrap justify-content-between align-items-center">
                                     <div class="img_area">
-                                        <img src="{{ $featured_service->provider ? asset($featured_service->provider->image) : '' }}" alt="user" class="img-fluid">
+                                        <img loading="lazy" src="{{ $featured_service->provider ? asset($featured_service->provider->image) : '' }}" alt="user" class="img-fluid">
                                         <span>{{ $featured_service->provider->name }}</span>
                                     </div>
                                     @php
@@ -239,7 +239,7 @@
                         <div class="col-xl-3 col-sm-6 col-lg-3">
                             <div class="wsus__single_counter">
                                 <span>
-                                    <img src="{{ asset($counter->icon) }}" alt="counter" class="img-fluid w-100">
+                                    <img loading="lazy" src="{{ asset($counter->icon) }}" alt="counter" class="img-fluid w-100">
                                 </span>
                                 <h4 class="counter">{{ $counter->number }}</h4>
                                 <p>{{ $counter->title }}</p>
@@ -274,7 +274,7 @@
                     <div class="col-lg-4 col-md-6">
                         <div class="wsus__single_services">
                             <div class="wsus__services_img">
-                                <img src="{{ asset($popular_service->image) }}" alt="service" class="img-fluid w-100">
+                                <img loading="lazy" src="{{ asset($popular_service->image) }}" alt="service" class="img-fluid w-100">
                             </div>
                             <div class="wsus__services_text">
                                 <ul class="d-flex justify-content-between">
@@ -285,7 +285,7 @@
                                 <div
                                     class="single_service_footer d-flex flex-wrap justify-content-between align-items-center">
                                     <div class="img_area">
-                                        <img src="{{ $popular_service->provider ? asset($popular_service->provider->image) : '' }}" alt="user" class="img-fluid">
+                                        <img loading="lazy" src="{{ $popular_service->provider ? asset($popular_service->provider->image) : '' }}" alt="user" class="img-fluid">
                                         <span>{{ $popular_service->provider->name }}</span>
                                     </div>
 
@@ -373,7 +373,7 @@
                 </div>
                 <div class="col-xl-5 col-lg-5">
                     <div class="wsus__work_sectiion_img">
-                        <img src="{{ asset($how_it_work->foreground) }}" alt="work" class="img-fluid w-100">
+                        <img loading="lazy" src="{{ asset($how_it_work->foreground) }}" alt="work" class="img-fluid w-100">
                     </div>
                 </div>
             </div>
@@ -414,7 +414,7 @@
                 </div>
                 <div class="col-xl-5 col-md-5">
                     <div class="wsus__app_download_img">
-                        <img src="{{ asset($mobile_app->home3_app_image) }}" alt="app download" class="img-fluid w-100">
+                        <img loading="lazy" src="{{ asset($mobile_app->home3_app_image) }}" alt="app download" class="img-fluid w-100">
                     </div>
                 </div>
             </div>
@@ -473,7 +473,7 @@
                         <div class="wsus__single_testimonial">
                             <p class="review_text">{{ $testimonial->comment }}</p>
                             <div class="wsus__single_testimonial_img">
-                                <img src="{{ asset($testimonial->image) }}" alt="clients" class="img-fluid">
+                                <img loading="lazy" src="{{ asset($testimonial->image) }}" alt="clients" class="img-fluid">
                                 <p><span>{{ $testimonial->name }}</span> {{ $testimonial->designation }}</p>
                             </div>
                         </div>
@@ -508,7 +508,7 @@
                     <div class="col-lg-4 col-md-6">
                         <div class="wsus__single_blog">
                             <div class="wsus__single_blog_img">
-                                <img src="{{ asset($blog->image) }}" alt="blog" class="img-fluid w-100">
+                                <img loading="lazy" src="{{ asset($blog->image) }}" alt="blog" class="img-fluid w-100">
                             </div>
                             <div class="wsus__single_blog_text">
                                 <ul class="d-flex flex-wrap">
@@ -550,7 +550,7 @@
                 </div>
                 <div class="col-xl-5 col-md-6 d-none d-lg-block">
                     <div class="wsus__subscribe_img">
-                        <img src="{{ asset($subscriber->foreground_image) }}" alt="subecribe" class="img-fluid w-100">
+                        <img loading="lazy" src="{{ asset($subscriber->foreground_image) }}" alt="subecribe" class="img-fluid w-100">
                     </div>
                 </div>
             </div>

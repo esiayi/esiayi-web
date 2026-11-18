@@ -34,7 +34,7 @@
                                 @if ($order->order_note)
                                 <h6 class="mt-4">{{__('admin.Booking Note')}}</h6>
                                 <hr>
-                                    <p>{!! html_decode(clean(nl2br($order->order_note))) !!}</p>
+                                    <p>{!! clean(nl2br(html_decode($order->order_note))) !!}</p>
                                 @endif
 
                                 <h6 class="mt-4">{{__('admin.Client Details')}}</h6>
@@ -69,6 +69,9 @@
                                 <p>{{__('admin.Discount')}} (-) : {{ $currency_icon->icon }}{{ $order->coupon_discount }}</p>
 
                                 <p>{{__('admin.Total Amount')}} : {{ $currency_icon->icon }}{{ $order->total_amount }}</p>
+                                @if (round($order->total_amount + $order->coupon_discount, 2) < round($order->package_amount, 2))
+                                <p class="text-danger">{{ __('The total is lower than the listed service price. Check the booking before approving payment.') }}</p>
+                                @endif
 
 
 
@@ -144,7 +147,7 @@
                                 <a data-toggle="modal" data-target="#deleteModal" onclick="deleteData({{ $order->id }})" href="javascript:;" data-toggle="modal" data-target="#declinedOrder-{{ $order->id }}" class="btn btn-danger btn-sm"><i class="fas fa-trash    "></i> {{__('admin.Delete Booking')}}</a>
 
 
-                                @if ($order->order_status != 'complete')
+                                @if ($order->order_status != 'complete' && $order->payment_status == 'success')
                                 <a href="javascript:;"  data-toggle="modal" data-target="#markAsCompelete-{{ $order->id }}" class="btn btn-primary btn-sm"><i class="fas fa-check"></i> {{__('admin.Mark as complete')}}</a>
                                 @endif
 
@@ -164,14 +167,14 @@
                                         <tr>
                                             <td>{{__('admin.Resone')}}</td>
                                             <td>
-                                                {!! html_decode(clean(nl2br($refundRequest->resone))) !!}
+                                                {!! clean(nl2br(html_decode($refundRequest->resone))) !!}
                                             </td>
                                         </tr>
 
                                         <tr>
                                             <td>{{__('admin.Account Information')}}</td>
                                             <td>
-                                                {!! html_decode(clean(nl2br($refundRequest->account_information))) !!}
+                                                {!! clean(nl2br(html_decode($refundRequest->account_information))) !!}
                                             </td>
                                         </tr>
 
@@ -201,7 +204,7 @@
                                         @endif
 
 
-                                        @if ($order->order_status != 'complete')
+                                        @if ($order->order_status != 'complete' && $order->payment_status == 'success')
                                             @if ($refundRequest->status != 'complete')
                                                 <a href="javascript:;"  data-toggle="modal" data-target="#approvedRefundRequest-{{ $refundRequest->id }}" class="btn btn-primary btn-sm"><i class="fas fa-check"></i> {{__('admin.Approved')}}</a>
                                             @endif
@@ -227,7 +230,7 @@
                                         <tr>
                                             <td>{{__('admin.Resone')}}</td>
                                             <td>
-                                                {!! html_decode(clean(nl2br($completeRequest->resone))) !!}
+                                                {!! clean(nl2br(html_decode($completeRequest->resone))) !!}
                                             </td>
                                         </tr>
 
@@ -314,6 +317,11 @@
                 </div>
                 <div class="modal-body">
                 <p>{{__('admin.Are You sure approved this payment')}}</p>
+                <p class="mb-0">{{ __('Booking') }} #{{ $order->order_id }} &middot; {{ $order->payment_method }}</p>
+                <p class="mb-0">{{ __('Amount to confirm') }}: <strong>{{ $currency_icon->icon }}{{ $order->total_amount }}</strong></p>
+                @if ($order->transection_id)
+                <p class="mb-0">{{ __('Reference') }}: {{ $order->transection_id }}</p>
+                @endif
                 </div>
                 <div class="modal-footer bg-whitesmoke br">
                     <form action="{{ route('admin.payment-approved', $order->id) }}" method="POST">

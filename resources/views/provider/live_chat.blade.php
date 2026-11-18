@@ -103,7 +103,7 @@
                 })
             })
 
-            Echo.private("buyer-to-provider.{{$active_user_for_message->id}}")
+            window.Echo && window.Echo.private("buyer-to-provider.{{$active_user_for_message->id}}")
             .listen('BuyerProviderMessage', (e) => {
 
                 let sender_buyer_id = e.message[0].buyer_id;

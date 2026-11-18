@@ -4,7 +4,7 @@
     <title>{{ $seo_setting->seo_title }}</title>
 @endsection
 
-@section('title')
+@section('meta')
     <meta name="description" content="{{ $seo_setting->seo_description }}">
 @endsection
 
@@ -46,7 +46,7 @@
                                 <div class="col-xl-6 col-md-6">
                                     <div class="wsus__single_blog">
                                         <div class="wsus__single_blog_img">
-                                            <img src="{{ asset($blog->image) }}" alt="blog" class="img-fluid w-100">
+                                            <img loading="lazy" src="{{ asset($blog->image) }}" alt="blog" class="img-fluid w-100">
                                         </div>
                                         <div class="wsus__single_blog_text">
                                             <ul class="d-flex flex-wrap">
@@ -83,7 +83,7 @@
                             <ul>
                                 @foreach ($popular_blogs as $popular_blog)
                                     <li>
-                                        <img src="{{ asset($popular_blog->image) }}" alt="blog" class="img-fluid w-100">
+                                        <img loading="lazy" src="{{ asset($popular_blog->image) }}" alt="blog" class="img-fluid w-100">
                                         <div class="text">
                                             <a href="{{ route('blog', $popular_blog->slug) }}">{{ $popular_blog->title }}</a>
                                             <p><i class="far fa-calendar-alt"></i> {{ $popular_blog->created_at->format('d M Y') }}</p>

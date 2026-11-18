@@ -63,7 +63,14 @@
                                             <div class="col-xl-12">
                                                 <fieldset>
                                                     <legend>{{__('user.password')}}*</legend>
-                                                    <input type="password" name="password">
+                                                    <input type="password" name="password" minlength="8" autocomplete="new-password">
+                                                </fieldset>
+                                            </div>
+
+                                            <div class="col-xl-12">
+                                                <fieldset>
+                                                    <legend>{{ __('Confirm password') }}*</legend>
+                                                    <input type="password" name="password_confirmation" minlength="8" autocomplete="new-password">
                                                 </fieldset>
                                             </div>
 

@@ -20,13 +20,16 @@
                                 @csrf
                                 <div class="row">
                                     <div class="form-group col-md-12">
-                                        <label for="">{{__('user.Day')}} <span class="text-danger">*</span></label>
-                                        <select name="day" id="" class="form-control">
-                                            <option value="">{{__('user.Select Day')}}</option>
+                                        <label>{{__('user.Day')}} <span class="text-danger">*</span></label>
+                                        <p class="text-muted small mb-2">{{ __('Tick every day this time slot applies to.') }}</p>
+                                        <div class="d-flex flex-wrap">
                                             @foreach ($days as $day)
-                                            <option value="{{ $day }}">{{ $day }}</option>
+                                            <div class="custom-control custom-checkbox mr-4 mb-2">
+                                                <input type="checkbox" class="custom-control-input" name="days[]" value="{{ $day }}" id="day-{{ $day }}" {{ in_array($day, old('days', [])) ? 'checked' : '' }}>
+                                                <label class="custom-control-label" for="day-{{ $day }}">{{ $day }}</label>
+                                            </div>
                                             @endforeach
-                                        </select>
+                                        </div>
                                     </div>
 
 

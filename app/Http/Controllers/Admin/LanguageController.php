@@ -8,7 +8,7 @@ class LanguageController extends Controller
 {
 
     public function adminLnagugae(){
-        $data = include('lang/en/admin.php');
+        $data = include(lang_path('en/admin.php'));
         return view('admin.admin_language', compact('data'));
     }
 
@@ -18,9 +18,9 @@ class LanguageController extends Controller
         foreach($request->values as $index => $value){
             $dataArray[$index] = $value;
         }
-        file_put_contents('lang/en/admin.php', "");
+        file_put_contents(lang_path('en/admin.php'), "");
         $dataArray = var_export($dataArray, true);
-        file_put_contents('lang/en/admin.php', "<?php\n return {$dataArray};\n ?>");
+        file_put_contents(lang_path('en/admin.php'), "<?php\n return {$dataArray};\n ?>");
 
         $notification= trans('admin_validation.Update Successfully');
         $notification=array('messege'=>$notification,'alert-type'=>'success');
@@ -28,7 +28,7 @@ class LanguageController extends Controller
     }
 
     public function adminValidationLnagugae(){
-        $data = include('lang/en/admin_validation.php');
+        $data = include(lang_path('en/admin_validation.php'));
         return view('admin.admin_validation_language', compact('data'));
     }
 
@@ -37,9 +37,9 @@ class LanguageController extends Controller
         foreach($request->values as $index => $value){
             $dataArray[$index] = $value;
         }
-        file_put_contents('lang/en/admin_validation.php', "");
+        file_put_contents(lang_path('en/admin_validation.php'), "");
         $dataArray = var_export($dataArray, true);
-        file_put_contents('lang/en/admin_validation.php', "<?php\n return {$dataArray};\n ?>");
+        file_put_contents(lang_path('en/admin_validation.php'), "<?php\n return {$dataArray};\n ?>");
 
         $notification= trans('admin_validation.Update Successfully');
         $notification=array('messege'=>$notification,'alert-type'=>'success');
@@ -48,7 +48,7 @@ class LanguageController extends Controller
 
     public function websiteLanguage(){
 
-        $data = include('lang/en/user.php');
+        $data = include(lang_path('en/user.php'));
         return view('admin.language', compact('data'));
     }
 
@@ -58,9 +58,9 @@ class LanguageController extends Controller
         foreach($request->values as $index => $value){
             $dataArray[$index] = $value;
         }
-        file_put_contents('lang/en/user.php', "");
+        file_put_contents(lang_path('en/user.php'), "");
         $dataArray = var_export($dataArray, true);
-        file_put_contents('lang/en/user.php', "<?php\n return {$dataArray};\n ?>");
+        file_put_contents(lang_path('en/user.php'), "<?php\n return {$dataArray};\n ?>");
 
         $notification= trans('admin_validation.Update Successfully');
         $notification=array('messege'=>$notification,'alert-type'=>'success');
@@ -69,7 +69,7 @@ class LanguageController extends Controller
 
 
     public function websiteValidationLanguage(){
-        $data = include('lang/en/user_validation.php');
+        $data = include(lang_path('en/user_validation.php'));
         return view('admin.website_validation_language', compact('data'));
     }
 
@@ -79,9 +79,9 @@ class LanguageController extends Controller
         foreach($request->values as $index => $value){
             $dataArray[$index] = $value;
         }
-        file_put_contents('lang/en/user_validation.php', "");
+        file_put_contents(lang_path('en/user_validation.php'), "");
         $dataArray = var_export($dataArray, true);
-        file_put_contents('lang/en/user_validation.php', "<?php\n return {$dataArray};\n ?>");
+        file_put_contents(lang_path('en/user_validation.php'), "<?php\n return {$dataArray};\n ?>");
 
         $notification= trans('admin_validation.Update Successfully');
         $notification=array('messege'=>$notification,'alert-type'=>'success');

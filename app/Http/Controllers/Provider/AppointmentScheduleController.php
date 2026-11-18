@@ -43,27 +43,34 @@ class AppointmentScheduleController extends Controller
     public function store(Request $request){
 
         $auth_user = Auth::guard('web')->user();
+        $week = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+        // The form sends days[] so one slot can be added to several days at once; a single day still works.
+        $request->merge(['days' => array_values(array_filter((array) ($request->days ?? $request->day)))]);
 
         $rules = [
-            'day'=>'required',
+            'days'=>'required|array',
+            'days.*'=>'in:'.implode(',', $week),
             'start_time'=>'required',
-            'end_time'=>'required',
+            'end_time'=>'required|after:start_time',
         ];
         $customMessages = [
-            'day.required' => trans('user_validation.Day is required'),
+            'days.required' => trans('user_validation.Day is required'),
             'start_time.required' => trans('user_validation.Start time is required'),
             'end_time.required' => trans('user_validation.End time is required'),
         ];
 
         $this->validate($request, $rules, $customMessages);
 
-        $schedule = new AppointmentSchedule();
-        $schedule->user_id = $auth_user->id;
-        $schedule->day = $request->day;
-        $schedule->start_time = $request->start_time;
-        $schedule->end_time = $request->end_time;
-        $schedule->status = $request->status;
-        $schedule->save();
+        foreach(array_unique($request->days) as $day){
+            $schedule = new AppointmentSchedule();
+            $schedule->user_id = $auth_user->id;
+            $schedule->day = $day;
+            $schedule->start_time = $request->start_time;
+            $schedule->end_time = $request->end_time;
+            $schedule->status = $request->status;
+            $schedule->save();
+        }
 
         $notification= trans('user_validation.Created Successfully');
         $notification=array('messege'=>$notification,'alert-type'=>'success');
@@ -82,7 +89,7 @@ class AppointmentScheduleController extends Controller
             'Saturday'
         );
 
-        $schedule = AppointmentSchedule::find($id);
+        $schedule = $this->ownedSchedule($id);
 
         return view('provider.edit_appointment_schedule')->with([
             'days' => $days,
@@ -97,7 +104,7 @@ class AppointmentScheduleController extends Controller
         $rules = [
             'day'=>'required',
             'start_time'=>'required',
-            'end_time'=>'required',
+            'end_time'=>'required|after:start_time',
         ];
         $customMessages = [
             'day.required' => trans('user_validation.Day is required'),
@@ -107,7 +114,7 @@ class AppointmentScheduleController extends Controller
 
         $this->validate($request, $rules, $customMessages);
 
-        $schedule = AppointmentSchedule::find($id);
+        $schedule = $this->ownedSchedule($id);
         $schedule->user_id = $auth_user->id;
         $schedule->day = $request->day;
         $schedule->start_time = $request->start_time;
@@ -124,7 +131,7 @@ class AppointmentScheduleController extends Controller
     public function destroy($id){
         $exist = Order::where('appointment_schedule_id', $id)->count();
         if($exist == 9){
-            $schedule = AppointmentSchedule::find($id);
+            $schedule = $this->ownedSchedule($id);
             $schedule->delete();
 
             $notification= trans('user_validation.Deleted Successfully');
@@ -139,4 +146,10 @@ class AppointmentScheduleController extends Controller
 
     }
 
+    /**
+     * A schedule that belongs to the logged-in provider, or a 404.
+     */
+    private function ownedSchedule($id){
+        return AppointmentSchedule::where(['id' => $id, 'user_id' => Auth::guard('web')->user()->id])->firstOrFail();
+    }
 }

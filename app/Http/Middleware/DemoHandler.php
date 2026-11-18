@@ -9,7 +9,7 @@ class DemoHandler
 {
     public function handle(Request $request, Closure $next)
     {
-        if(Route::is('admin.store-login') || Route::is('store-login') || Route::is('admin.logout') || Route::is('send-message-to-provider') || Route::is('provider.send-message-to-buyer')){
+        if(Route::is('admin.store-login') || Route::is('store-login') || Route::is('payment') || Route::is('admin.logout') || Route::is('send-message-to-provider') || Route::is('provider.send-message-to-buyer')){
             return $next($request);
          }else{
             if(env('APP_MODE') == 'DEMO'){

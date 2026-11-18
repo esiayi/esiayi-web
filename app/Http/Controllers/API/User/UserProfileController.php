@@ -73,7 +73,7 @@ class UserProfileController extends Controller
     }
 
     public function show_ticket($id){
-        $ticket = Ticket::with('user','order')->where('ticket_id', $id)->first();
+        $ticket = Ticket::with('user','order')->where(['ticket_id' => $id, 'user_id' => Auth::guard('api')->user()->id])->firstOrFail();
         TicketMessage::where('ticket_id', $ticket->id)->update(['unseen_user' => 1]);
         $messages = TicketMessage::where('ticket_id', $ticket->id)->get();
 
@@ -98,6 +98,7 @@ class UserProfileController extends Controller
 
         $user = Auth::guard('api')->user();
         $message = new TicketMessage();
+        Ticket::where(['id' => $request->ticket_id, 'user_id' => Auth::guard('api')->user()->id])->firstOrFail();
         $message->ticket_id = $request->ticket_id;
         $message->admin_id = 0;
         $message->user_id = $user->id;
@@ -147,6 +148,7 @@ class UserProfileController extends Controller
 
         $ticket = new Ticket();
         $ticket->user_id = $user->id;
+        $this->ownedOrder($request->order_id);
         $ticket->order_id = $request->order_id;
         $ticket->subject = $request->subject;
         $ticket->ticket_id = substr(rand(0,time()),0,10);
@@ -170,7 +172,10 @@ class UserProfileController extends Controller
     }
 
     public function mark_as_a_complete($id){
-        $order = Order::find($id);
+        $order = $this->ownedOrder($id);
+        if($order->order_status != 'approved_by_provider'){
+            return response()->json(['message' => __('Only an accepted booking can be marked as complete.')], 403);
+        }
         $order->order_status = 'complete';
         $order->save();
 
@@ -179,7 +184,10 @@ class UserProfileController extends Controller
     }
 
     public function mark_as_a_declined($id){
-        $order = Order::find($id);
+        $order = $this->ownedOrder($id);
+        if($order->order_status != 'approved_by_provider'){
+            return response()->json(['message' => __('Only an accepted booking can be declined.')], 403);
+        }
         $order->order_status = 'order_decliened_by_client';
         $order->save();
 
@@ -201,6 +209,11 @@ class UserProfileController extends Controller
         ];
         $this->validate($request, $rules,$customMessages);
 
+        $order = $this->ownedOrder($request->order_id);
+        if(!in_array($order->order_status, ['order_decliened_by_client', 'order_decliened_by_provider']) || RefundRequest::where('order_id', $order->id)->exists()){
+            return response()->json(['message' => __('A refund can only be requested once, for a declined booking.')], 403);
+        }
+
         $refund = new RefundRequest();
         $refund->client_id = $user->id;
         $refund->resone = $request->resone;
@@ -214,7 +227,7 @@ class UserProfileController extends Controller
 
     public function get_invoice($id){
 
-        $order = Order::with('client','provider','service','refundRequest','completeRequest')->orderBy('id','desc')->where('order_id',$id)->first();
+        $order = Order::with('client','provider','service','refundRequest','completeRequest')->where(['order_id' => $id, 'client_id' => Auth::guard('api')->user()->id])->firstOrFail();
         $title = trans('user_validation.Booking Details');
         $setting = Setting::first();
         $currency_icon = array(
@@ -298,12 +311,12 @@ class UserProfileController extends Controller
     public function updatePassword(Request $request){
         $rules = [
             'current_password'=>'required',
-            'password'=>'required|min:4|confirmed',
+            'password'=>'required|min:8|confirmed',
         ];
         $customMessages = [
             'current_password.required' => trans('user_validation.Current password is required'),
             'password.required' => trans('user_validation.Password is required'),
-            'password.min' => trans('user_validation.Password minimum 4 character'),
+            'password.min' => __('Password must be at least 8 characters.'),
             'password.confirmed' => trans('user_validation.Confirm password does not match'),
         ];
         $this->validate($request, $rules,$customMessages);
@@ -772,7 +785,10 @@ class UserProfileController extends Controller
         return redirect()->back()->with($notification);
     }
 
-
-
-
+    /**
+     * An order placed by the logged-in customer, or a 404.
+     */
+    private function ownedOrder($id){
+        return Order::where(['id' => $id, 'client_id' => Auth::guard('api')->user()->id])->firstOrFail();
+    }
 }

@@ -3,7 +3,7 @@
     <title>{{ $seo_setting->seo_title }}</title>
 @endsection
 
-@section('title')
+@section('meta')
     <meta name="description" content="{{ $seo_setting->seo_description }}">
 @endsection
 
@@ -122,11 +122,11 @@
                             <div class="col-xl-4 col-md-6 col-lg-4">
                                 <div class="wsus__single_services2">
                                     <div class="wsus__services_img2">
-                                        <img src="{{ asset($service->image) }}" alt="service" class="img-fluid w-100">
+                                        <img loading="lazy" src="{{ asset($service->image) }}" alt="service" class="img-fluid w-100">
                                         <a class="category" href="{{ route('services',['category'=> $service->category->slug]) }}">{{ $service->category->name }}</a>
                                     </div>
                                     <div class="wsus__services_text2">
-                                        <img src="{{ $service->provider ? asset($service->provider->image) : '' }}" alt="user" class="img-fluid">
+                                        <img loading="lazy" src="{{ $service->provider ? asset($service->provider->image) : '' }}" alt="user" class="img-fluid">
                                         <ul class="d-flex justify-content-between">
                                             <li>{{ $service->provider->name }}</li>
 
@@ -191,7 +191,7 @@
                             <div class="col-xl-4 col-md-6 col-lg-4">
                                 <div class="wsus__single_services">
                                     <div class="wsus__services_img">
-                                        <img src="{{ asset($service->image) }}" alt="service" class="img-fluid w-100">
+                                        <img loading="lazy" src="{{ asset($service->image) }}" alt="service" class="img-fluid w-100">
                                     </div>
                                     <div class="wsus__services_text">
                                         <ul class="d-flex justify-content-between">
@@ -202,7 +202,7 @@
                                         <div
                                             class="single_service_footer d-flex flex-wrap justify-content-between align-items-center">
                                             <div class="img_area">
-                                                <img src="{{ $service->provider ? asset($service->provider->image) : '' }}" alt="user" class="img-fluid">
+                                                <img loading="lazy" src="{{ $service->provider ? asset($service->provider->image) : '' }}" alt="user" class="img-fluid">
                                                 <span>{{ $service->provider->name }}</span>
                                             </div>
 
@@ -274,7 +274,7 @@
                                 <div class="col-xl-2 col-sm-6 col-md-4 col-lg-3">
                                     <div class="wsus__single_brand">
                                         <a href="{{ $partner->link ? $partner->link : 'javascript:;' }}">
-                                            <img src="{{ asset($partner->logo) }}" alt="brand" class="img-fluid w-100">
+                                            <img loading="lazy" src="{{ asset($partner->logo) }}" alt="brand" class="img-fluid w-100">
                                         </a>
                                     </div>
                                 </div>

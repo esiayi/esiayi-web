@@ -43,7 +43,7 @@ class ProviderOrderController extends Controller
 
         $complete_booking = Order::where('order_status','complete')->where('provider_id', $provider->id)->count();
 
-        $decliened_booking = Order::where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client')->count();
+        $decliened_booking = Order::where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])->count();
 
         return response()->json([
             'title' => $title,
@@ -81,7 +81,7 @@ class ProviderOrderController extends Controller
 
         $complete_booking = Order::where('order_status','complete')->where('provider_id', $provider->id)->count();
 
-        $decliened_booking = Order::where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client')->count();
+        $decliened_booking = Order::where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])->count();
 
         return response()->json([
             'title' => $title,
@@ -119,7 +119,7 @@ class ProviderOrderController extends Controller
 
         $complete_booking = Order::where('order_status','complete')->where('provider_id', $provider->id)->count();
 
-        $decliened_booking = Order::where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client')->count();
+        $decliened_booking = Order::where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])->count();
 
         return response()->json([
             'title' => $title,
@@ -157,7 +157,7 @@ class ProviderOrderController extends Controller
 
         $complete_booking = Order::where('order_status','complete')->where('provider_id', $provider->id)->count();
 
-        $decliened_booking = Order::where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client')->count();
+        $decliened_booking = Order::where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])->count();
 
         return response()->json([
             'title' => $title,
@@ -173,7 +173,7 @@ class ProviderOrderController extends Controller
     public function declineBooking(Request $request){
         Paginator::useBootstrap();
         $provider = Auth::guard('api')->user();
-        $orders = Order::with('client','service')->orderBy('id','desc')->where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client');
+        $orders = Order::with('client','service')->orderBy('id','desc')->where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client']);
 
         if($request->booking_id){
             $orders = $orders->where('order_id', $request->booking_id);
@@ -195,7 +195,7 @@ class ProviderOrderController extends Controller
 
         $complete_booking = Order::where('order_status','complete')->where('provider_id', $provider->id)->count();
 
-        $decliened_booking = Order::where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client')->count();
+        $decliened_booking = Order::where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])->count();
 
         return response()->json([
             'title' => $title,
@@ -213,7 +213,7 @@ class ProviderOrderController extends Controller
 
 
     public function show($id){
-        $order = Order::with('client','service','completeRequest')->where('order_id',$id)->first();
+        $order = Order::with('client','service','completeRequest')->where(['order_id' => $id, 'provider_id' => Auth::guard('api')->user()->id])->firstOrFail();
         $setting = Setting::first();
         $currency_icon = array(
             'icon' => $setting->currency_icon
@@ -240,7 +240,10 @@ class ProviderOrderController extends Controller
 
 
     public function bookingDecilendRequest($id){
-        $order = Order::find($id);
+        $order = $this->ownedOrder($id);
+        if($order->order_status == 'complete'){
+            return response()->json(['message' => __('A completed booking cannot be declined.')], 403);
+        }
         $order->order_status = 'order_decliened_by_provider';
         $order->save();
 
@@ -249,7 +252,13 @@ class ProviderOrderController extends Controller
     }
 
     public function bookingApprovedRequest($id){
-        $order = Order::find($id);
+        $order = $this->ownedOrder($id);
+        if($order->payment_status != 'success'){
+            return response()->json(['message' => __('This booking cannot be accepted until its payment is confirmed.')], 403);
+        }
+        if($order->order_status != 'awaiting_for_provider_approval'){
+            return response()->json(['message' => __('This booking is no longer waiting for approval.')], 403);
+        }
         $order->order_status = 'approved_by_provider';
         $order->save();
 
@@ -291,7 +300,7 @@ class ProviderOrderController extends Controller
 
         $complete_booking = Order::where('order_status','complete')->where('provider_id', $provider->id)->count();
 
-        $decliened_booking = Order::where('provider_id', $provider->id)->where('order_status','order_decliened_by_provider')->orWhere('order_status', 'order_decliened_by_client')->count();
+        $decliened_booking = Order::where('provider_id', $provider->id)->whereIn('order_status', ['order_decliened_by_provider', 'order_decliened_by_client'])->count();
 
         return response()->json([
             'title' => $title,
@@ -317,6 +326,8 @@ class ProviderOrderController extends Controller
         ];
         $this->validate($request, $rules,$customMessages);
 
+        $this->ownedOrder($request->order_id);
+
         $data = new CompleteRequest();
         $data->provider_id = $user->id;
         $data->order_id = $request->order_id;
@@ -328,5 +339,10 @@ class ProviderOrderController extends Controller
 
     }
 
-
+    /**
+     * An order that belongs to the logged-in provider, or a 404.
+     */
+    private function ownedOrder($id){
+        return Order::where(['id' => $id, 'provider_id' => Auth::guard('api')->user()->id])->firstOrFail();
+    }
 }

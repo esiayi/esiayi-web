@@ -110,7 +110,11 @@ class ServiceController extends Controller
         $rules = [
             'name'=>'required',
             'slug'=>'required|unique:services',
-            'price'=>'required',
+            'price'=>'required|numeric|min:0',
+            'additional_prices.*'=>'nullable|numeric|min:0',
+            'additional_quantities.*'=>'nullable|integer|min:1',
+            'exist_additional_prices.*'=>'nullable|numeric|min:0',
+            'exist_additional_quantities.*'=>'nullable|integer|min:1',
             'category_id'=>'required',
             'details'=>'required',
             'image'=>'required',
@@ -211,7 +215,7 @@ class ServiceController extends Controller
 
     public function edit($id){
         $categories = Category::where('status', 1)->get();
-        $service = Service::find($id);
+        $service = $this->ownedService($id);
 
         $package_features = array();
         if($service->package_features){
@@ -250,11 +254,15 @@ class ServiceController extends Controller
     }
 
     public function update(Request $request, $id){
-        $service = Service::find($id);
+        $service = $this->ownedService($id);
         $rules = [
             'name'=>'required',
             'slug'=>'required|unique:services,slug,'. $service->id,
-            'price'=>'required',
+            'price'=>'required|numeric|min:0',
+            'additional_prices.*'=>'nullable|numeric|min:0',
+            'additional_quantities.*'=>'nullable|integer|min:1',
+            'exist_additional_prices.*'=>'nullable|numeric|min:0',
+            'exist_additional_quantities.*'=>'nullable|integer|min:1',
             'category_id'=>'required',
             'details'=>'required',
         ];
@@ -332,7 +340,10 @@ class ServiceController extends Controller
         if($request->ids){
             foreach($request->ids as $exist_index => $id){
                 if($request->ids[$exist_index] && $request->exist_additional_services[$exist_index] && $request->exist_additional_quantities[$exist_index] && $request->exist_additional_prices[$exist_index]){
-                    $additional_service = AdditionalService::find($id);
+                    $additional_service = AdditionalService::where('service_id', $service->id)->find($id);
+                    if(!$additional_service){
+                        continue;
+                    }
                     $additional_service->service_name = $request->exist_additional_services[$exist_index];
                     $additional_service->qty = $request->exist_additional_quantities[$exist_index];
                     $additional_service->price = $request->exist_additional_prices[$exist_index];
@@ -398,7 +409,7 @@ class ServiceController extends Controller
     }
 
     public function destroy($id){
-        $service = Service::find($id);
+        $service = $this->ownedService($id);
 
         $additional_services = AdditionalService::where('service_id', $id)->get();
         foreach($additional_services as $additional_service){
@@ -433,5 +444,12 @@ class ServiceController extends Controller
         $review = Review::where('provider_id', $user->id)->with('user','service')->orderBy('id','desc')->where('id', $id)->first();
 
         return response()->json(['review' => $review]);
+    }
+
+    /**
+     * A service that belongs to the logged-in provider, or a 404.
+     */
+    private function ownedService($id){
+        return Service::where(['id' => $id, 'provider_id' => Auth::guard('api')->user()->id])->firstOrFail();
     }
 }

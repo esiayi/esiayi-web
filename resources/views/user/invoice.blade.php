@@ -140,8 +140,8 @@
 <div class="wsus__invoice_footer_request">
     <h4>{{__('user.Rofund Request')}}</h4>
     <p><span>{{__('user.Request Date')}}</span> {{ $refundRequest->created_at->format('h:i A, d-M-Y') }}</p>
-    <p><span>{{__('user.Resone')}}</span> {!! html_decode(clean(nl2br($refundRequest->resone))) !!}</p>
-    <p><span>{{__('user.Account Information')}}</span> {!! html_decode(clean(nl2br($refundRequest->account_information))) !!}</p>
+    <p><span>{{__('user.Resone')}}</span> {!! clean(nl2br(html_decode($refundRequest->resone))) !!}</p>
+    <p><span>{{__('user.Account Information')}}</span> {!! clean(nl2br(html_decode($refundRequest->account_information))) !!}</p>
     <p><span>{{__('user.Refund Status')}}</span>
         @if ($order->complete_by_admin == 'Yes')
             {{__('user.Refund request declined and order completed by admin')}}
@@ -215,7 +215,10 @@
             </div>
             <div class="modal-body">
                 <div class="wsus__review_input">
-                    <a href="{{ route('mark-as-a-complete', $order->id) }}" class="common_btn mt_20">{{__('user.Yes, Complete')}}</a>
+                    <form method="POST" action="{{ route('mark-as-a-complete', $order->id) }}">
+                        @csrf
+                        <button type="submit" class="common_btn mt_20">{{__('user.Yes, Complete')}}</button>
+                    </form>
                 </div>
             </div>
         </div>
@@ -237,7 +240,10 @@
             </div>
             <div class="modal-body">
                 <div class="wsus__review_input">
-                    <a href="{{ route('mark-as-a-declined', $order->id) }}" class="common_btn mt_20">{{__('user.Yes, Declined')}}</a>
+                    <form method="POST" action="{{ route('mark-as-a-declined', $order->id) }}">
+                        @csrf
+                        <button type="submit" class="common_btn mt_20">{{__('user.Yes, Declined')}}</button>
+                    </form>
                 </div>
             </div>
         </div>

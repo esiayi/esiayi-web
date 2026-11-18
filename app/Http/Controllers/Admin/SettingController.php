@@ -51,7 +51,6 @@ use App\Models\Currency;
 
 use Image;
 use File;
-use Artisan;
 use Validator;
 class SettingController extends Controller
 {
@@ -482,10 +481,7 @@ class SettingController extends Controller
         $pusher->app_cluster = $request->app_cluster;
         $pusher->save();
 
-        Artisan::call("env:set PUSHER_APP_ID='". $request->app_id ."'");
-        Artisan::call("env:set PUSHER_APP_KEY='". $request->app_key ."'");
-        Artisan::call("env:set PUSHER_APP_SECRET='". $request->app_secret ."'");
-        Artisan::call("env:set PUSHER_APP_CLUSTER='". $request->app_cluster ."'");
+        // The broadcaster reads these from the database at runtime (AppServiceProvider).
 
 
         $notification = trans('admin_validation.Update Successfully');

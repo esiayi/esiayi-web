@@ -41,8 +41,8 @@ class CouponController extends Controller
 
         $rules = [
             'coupon_code'=>'required|unique:coupons',
-            'offer_percentage'=>'required',
-            'expired_date'=>'required',
+            'offer_percentage'=>'required|numeric|min:1|max:100',
+            'expired_date'=>'required|date',
         ];
         $customMessages = [
             'coupon_code.required' => trans('user_validation.Coupon code is required'),
@@ -73,8 +73,8 @@ class CouponController extends Controller
 
         $rules = [
             'coupon_code'=>'required|unique:coupons,coupon_code,'.$id,
-            'offer_percentage'=>'required',
-            'expired_date'=>'required',
+            'offer_percentage'=>'required|numeric|min:1|max:100',
+            'expired_date'=>'required|date',
         ];
         $customMessages = [
             'coupon_code.required' => trans('user_validation.Coupon code is required'),
@@ -85,7 +85,7 @@ class CouponController extends Controller
 
         $this->validate($request, $rules, $customMessages);
 
-        $coupon = Coupon::find($id);
+        $coupon = Coupon::where(['id' => $id, 'provider_id' => Auth::guard('web')->user()->id])->firstOrFail();
         $coupon->provider_id = $auth_user->id;
         $coupon->coupon_code = $request->coupon_code;
         $coupon->offer_percentage = $request->offer_percentage;
@@ -100,7 +100,7 @@ class CouponController extends Controller
     }
 
     public function destroy($id){
-        $coupon = Coupon::find($id);
+        $coupon = Coupon::where(['id' => $id, 'provider_id' => Auth::guard('web')->user()->id])->firstOrFail();
         $coupon->delete();
 
         $notification= trans('user_validation.Deleted Successfully');
