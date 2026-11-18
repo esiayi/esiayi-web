@@ -716,7 +716,7 @@ class PaymentController extends Controller
         $mollie_api_key = $mollie->mollie_key;
         $currency = strtoupper($mollie->mollie_currency_code);
         Mollie::api()->setApiKey($mollie_api_key);
-        $payment = Mollie::api()->payments()->create([
+        $payment = Mollie::api()->payments->create([
             'amount' => [
                 'currency' => $currency,
                 'value' => ''.$price.'',
@@ -725,7 +725,7 @@ class PaymentController extends Controller
             'redirectUrl' => route('mollie-payment-success'),
         ]);
 
-        $payment = Mollie::api()->payments()->get($payment->id);
+        $payment = Mollie::api()->payments->get($payment->id);
         session()->put('payment_id',$payment->id);
         session()->put('service',$service);
         return redirect($payment->getCheckoutUrl(), 303);

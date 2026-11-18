@@ -30,8 +30,11 @@ class RouteServiceProvider extends ServiceProvider
         $this->configureRateLimiting();
 
         $this->routes(function () {
+            // API route names are prefixed so they never shadow the website's routes of
+            // the same name (Laravel 13 resolves duplicate names to the API routes).
             Route::middleware('api')
                 ->prefix('api')
+                ->name('api.')
                 ->group(base_path('routes/api.php'));
 
             Route::middleware('web')

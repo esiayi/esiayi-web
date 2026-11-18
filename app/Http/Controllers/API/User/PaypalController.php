@@ -4,17 +4,6 @@ namespace App\Http\Controllers\API\User;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use PayPal\Api\Amount;
-use PayPal\Api\Details;
-use PayPal\Api\Item;
-use PayPal\Api\ItemList;
-use PayPal\Api\Payer;
-use PayPal\Api\Payment;
-use PayPal\Api\RedirectUrls;
-use PayPal\Api\Transaction;
-use PayPal\Rest\ApiContext;
-use PayPal\Auth\OAuthTokenCredential;
-use PayPal\Api\PaymentExecution;
 
 use App\Mail\OrderSuccessfully;
 use App\Helpers\MailHelper;
@@ -27,6 +16,7 @@ use App\Models\Order;
 use App\Models\Setting;
 use App\Models\AppointmentSchedule;
 use App\Services\BookingPricing;
+use App\Services\PayPalCheckout;
 
 use Str;
 use Cart;
@@ -37,28 +27,6 @@ use Auth;
 
 class PaypalController extends Controller
 {
-    private $apiContext;
-    public function __construct()
-    {
-        $account = PaypalPayment::first();
-        $paypal_conf = \Config::get('paypal');
-        $this->apiContext = new ApiContext(new OAuthTokenCredential(
-            $account->client_id,
-            $account->secret_id,
-            )
-        );
-
-        $setting=array(
-            'mode' => $account->account_mode,
-            'http.ConnectionTimeOut' => 30,
-            'log.LogEnabled' => true,
-            'log.FileName' => storage_path() . '/logs/paypal.log',
-            'log.LogLevel' => 'ERROR'
-        );
-        $this->apiContext->setConfig($setting);
-    }
-
-
     public function check_schedule_during_payment($slug){
         $service = Service::where(['slug' => $slug, 'approve_by_admin' => 1, 'status' => 1, 'is_banned' => 0])->first();
         $order_info = Session::get('order_info');
@@ -203,48 +171,21 @@ class PaypalController extends Controller
         $paypalSetting = PaypalPayment::first();
         $payableAmount = round($total_price * $paypalSetting->currency_rate,2);
 
-        $name=env('APP_NAME');
-
-        // set payer
-        $payer = new Payer();
-        $payer->setPaymentMethod("paypal");
-
-        // set amount total
-        $amount = new Amount();
-        $amount->setCurrency($paypalSetting->currency_code)
-            ->setTotal($payableAmount);
-
-        // transaction
-        $transaction = new Transaction();
-        $transaction->setAmount($amount)
-            ->setDescription(env('APP_NAME'));
-
-        // redirect url
-        $redirectUrls = new RedirectUrls();
-
-        $root_url=url('/');
-        $redirectUrls->setReturnUrl(route('paypal-payment-success-webview'))
-            ->setCancelUrl(route('paypal-payment-cancled-webview'));
-
-        // payment
-        $payment = new Payment();
-        $payment->setIntent("sale")
-            ->setPayer($payer)
-            ->setRedirectUrls($redirectUrls)
-            ->setTransactions(array($transaction));
         try {
-            $payment->create($this->apiContext);
-        } catch (\PayPal\Exception\PPConnectionException $ex) {
-
+            $paypalOrder = PayPalCheckout::fromSettings()->createOrder(
+                $payableAmount,
+                route('paypal-payment-success-webview'),
+                route('paypal-payment-cancled-webview'),
+                (string) env('APP_NAME')
+            );
+        } catch (\Exception $ex) {
             return redirect()->route('webview-payment-faild');
         }
 
-        // get paymentlink
-        $approvalUrl = $payment->getApprovalLink();
-
         Session::put('service', $service);
+        Session::put('paypal_order_id', $paypalOrder['id']);
 
-        return redirect($approvalUrl);
+        return redirect($paypalOrder['approve_url']);
     }
 
     public function paypalPaymentSuccess(Request $request){
@@ -254,42 +195,31 @@ class PaypalController extends Controller
         $user = Session::get('user');
         $order_info = json_decode(Session::get('order_info'));
 
-        if (!$service || !$user || !$order_info || ($order_info->service_id ?? null) != $service->id || empty($request->get('PayerID')) || empty($request->get('token')) || empty($request->get('paymentId'))) {
-            return redirect()->route('webview-payment-faild');
-        }
-
-        $payment_id=$request->get('paymentId');
-        if(BookingPricing::transactionUsed('Paypal', $payment_id)){
+        // PayPal returns ?token={order id}; it must be the order this session created.
+        $paypal_order_id = (string) $request->query('token');
+        if (!$service || !$user || !$order_info || ($order_info->service_id ?? null) != $service->id
+            || !$paypal_order_id || $paypal_order_id !== Session::get('paypal_order_id')
+            || BookingPricing::transactionUsed('Paypal', $paypal_order_id)) {
             return redirect()->route('webview-payment-faild');
         }
 
         try {
-            $payment = Payment::get($payment_id, $this->apiContext);
-
-            // Only execute a payment that was created for this booking's amount.
-            $paypalSetting = PaypalPayment::first();
-            $transactions = $payment->getTransactions();
-            $paid_amount = $transactions ? $transactions[0]->getAmount()->getTotal() : null;
-            if(!BookingPricing::amountCovers($paid_amount, round($order_info->total_price * $paypalSetting->currency_rate, 2))){
-                return redirect()->route('webview-payment-faild');
-            }
-
-            $execution = new PaymentExecution();
-            $execution->setPayerId($request->get('PayerID'));
-            /**Execute the payment **/
-            $result = $payment->execute($execution, $this->apiContext);
+            $paypal = PayPalCheckout::fromSettings();
+            $capture = $paypal->captureOrder($paypal_order_id);
         } catch (\Exception $ex) {
             return redirect()->route('webview-payment-faild');
         }
 
-        if ($result->getState() != 'approved') {
+        $paypalSetting = PaypalPayment::first();
+        if ($capture['currency'] != $paypal->currency()
+            || !BookingPricing::amountCovers($capture['amount'], round($order_info->total_price * $paypalSetting->currency_rate, 2))) {
             return redirect()->route('webview-payment-faild');
         }
 
         $provider_id = $service->provider_id;
         $client_id = $user->id;
 
-        $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Paypal', 'success', $payment_id);
+        $order = $this->createOrder($user, $service, $order_info, $provider_id, $client_id, 'Paypal', 'success', $paypal_order_id);
 
         $provider = $service->provider;
         $this->sendMailToClient($user, $order);
@@ -301,6 +231,7 @@ class PaypalController extends Controller
         Session::forget('user');
         Session::forget('frontend_success_url');
         Session::forget('frontend_faild_url');
+        Session::forget('paypal_order_id');
 
         return redirect()->route('webview-payment-success');
     }
