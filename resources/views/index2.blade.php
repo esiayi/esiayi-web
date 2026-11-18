@@ -13,11 +13,10 @@
     <!--=========================
         BANNER START
     ==========================-->
-    <section class="wsus__banner" style="background: url({{ asset($intro_section->home2_image) }});">
-        <div class="wsus__banner_overlay">
+    <section class="wsus__banner wsus__banner_split">
             <div class="container">
-                <div class="row">
-                    <div class="col-xl-7 col-md-12 col-lg-7 m-auto">
+                <div class="row align-items-center">
+                    <div class="col-lg-6">
                         <div class="wsus__banner_text">
                             <h6>{{ $intro_section->title }}</h6>
                             <h1>{{ $intro_section->header_one }} <b>{{ $intro_section->header_two }}</b></h1>
@@ -25,7 +24,7 @@
                             <form action="{{ route('services') }}">
                                 <ul class="wsus__banner_search d-flex flex-wrap">
                                     <li>
-                                        <p>{{__('user.I am looking to')}}..</p>
+                                        <p>{{__('user.Where')}}</p>
                                         <select name="service_area" class="select_2">
                                             <option value="">{{__('user.Location')}}</option>
                                             @foreach ($service_areas as $service_area)
@@ -34,7 +33,7 @@
                                         </select>
                                     </li>
                                     <li>
-                                        <p>{{__('user.I am looking to')}}..</p>
+                                        <p>{{__('user.What')}}</p>
                                         <select name="category" class="select_2">
                                             <option value="">{{__('user.Find Categories')}}</option>
                                             @foreach ($search_categories as $category)
@@ -49,9 +48,15 @@
                             </form>
                         </div>
                     </div>
+                    @if ($intro_section->home2_image)
+                    <div class="col-lg-6 d-none d-lg-block">
+                        <div class="wsus__banner_photo">
+                            <img src="{{ asset($intro_section->home2_image) }}" alt="" class="img-fluid w-100">
+                        </div>
+                    </div>
+                    @endif
                 </div>
             </div>
-        </div>
     </section>
     <!--=========================
         BANNER END
@@ -413,20 +418,7 @@
                         <h5>{{ $mobile_app->short_title }}</h5>
                         <h2>{{ $mobile_app->full_title }}</h2>
                         <p>{{ $mobile_app->description }}</p>
-                        <ul class="d-flex flex-wrap">
-                            <li>
-                                <a href="{{ $mobile_app->play_store }}">
-                                    <i class="fab fa-google-play"></i>
-                                    <span>{{__('user.Available on the')}} <b>{{__('user.Google Play')}}</b></span>
-                                </a>
-                            </li>
-                            <li>
-                                <a href="{{ $mobile_app->app_store }}">
-                                    <i class="fab fa-apple"></i>
-                                    <span>{{__('user.Download on the')}} <b>{{__('user.App Store')}}</b></span>
-                                </a>
-                            </li>
-                        </ul>
+                        <a href="{{ route('join-as-a-provider') }}" class="common_btn mt_15">{{ $join_as_a_provider->button_text }}</a>
                     </div>
                 </div>
             </div>

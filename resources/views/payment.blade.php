@@ -40,9 +40,9 @@
                 <div class="col-xl-8 col-lg-8">
                     <div class="wsus__booking_area">
                         <ul class="booking_bar d-flex flex-wrap">
-                            <li class="active">1 <span>{{__('user.Service')}}</span></li>
-                            <li class="active">2 <span>{{__('user.Information')}}</span></li>
-                            <li class="active">3 <span>{{__('user.Confirmation')}}</span></li>
+                            <li class="active"><b>1</b> <span>{{__('user.Service')}}</span></li>
+                            <li class="active"><b>2</b> <span>{{__('user.Information')}}</span></li>
+                            <li class="active"><b>3</b> <span>{{__('user.Confirmation')}}</span></li>
                         </ul>
                         <div class="wsus__booking_img">
                             <img src="{{ asset($service->image) }}" alt="booking images" class="img-fluid w-100">
@@ -59,6 +59,7 @@
                         </div>
                     </div>
 
+                    <h3 class="wsus__payment_heading">{{__('user.Payment Method')}}</h3>
                     <ul class="wsus__booking_payment d-flex flex-wrap">
 
                         @if ($stripe->status == 1)
