@@ -16,7 +16,7 @@
                 <div class="row">
                     <div class="col-12">
                         <div class="wsus__sellar_top_text d-flex flex-wrap align-items-center">
-                            <img src="{{ $provider->image ? asset($provider->image) : asset($default_avatar->image) }}" alt="sellar" class="img-fluid w-100">
+                            <img loading="lazy" src="{{ $provider->image ? asset($provider->image) : asset($default_avatar->image) }}" alt="sellar" class="img-fluid w-100">
                             <div class="text">
                                 <h2>{{ $provider->user_name }}</h2>
                                 <span>{{ $provider->designation }}</span>
@@ -67,7 +67,7 @@
                         <div class="col-xl-4 col-md-6 col-lg-4">
                             <div class="wsus__single_services">
                                 <div class="wsus__services_img">
-                                    <img src="{{ asset($service->image) }}" alt="service" class="img-fluid w-100">
+                                    <img loading="lazy" src="{{ asset($service->image) }}" alt="service" class="img-fluid w-100">
                                 </div>
                                 <div class="wsus__services_text">
                                     <ul class="d-flex justify-content-between">
@@ -78,7 +78,7 @@
                                     <div
                                         class="single_service_footer d-flex flex-wrap justify-content-between align-items-center">
                                         <div class="img_area">
-                                            <img src="{{ $service->provider ? asset($service->provider->image) : '' }}" alt="user" class="img-fluid">
+                                            <img loading="lazy" src="{{ $service->provider ? asset($service->provider->image) : '' }}" alt="user" class="img-fluid">
                                             <span>{{ $service->provider->name }}</span>
                                         </div>
 
@@ -146,7 +146,7 @@
                                 <div class="col-xl-2 col-sm-6 col-md-4 col-lg-3">
                                     <div class="wsus__single_brand">
                                         <a href="{{ $partner->link ? $partner->link : 'javascript:;' }}">
-                                            <img src="{{ asset($partner->logo) }}" alt="brand" class="img-fluid w-100">
+                                            <img loading="lazy" src="{{ asset($partner->logo) }}" alt="brand" class="img-fluid w-100">
                                         </a>
                                     </div>
                                 </div>

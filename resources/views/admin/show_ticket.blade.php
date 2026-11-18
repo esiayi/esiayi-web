@@ -22,7 +22,7 @@
                                             <div class="d-flex w-100 justify-content-between">
                                                 <h6 class="mb-1"> {{ $ticket->user->name }} <small>({{__('admin.Author')}})</small></h6> <small>{{ $message->created_at->diffForHumans() }}</small>
                                             </div>
-                                            <p class="mb-1">{!! html_decode(clean(nl2br($message->message))) !!}</p>
+                                            <p class="mb-1">{!! clean(nl2br(html_decode($message->message))) !!}</p>
 
                                             @if ($message->documents)
                                                 <div class="gallery">
@@ -38,7 +38,7 @@
                                             <div class="d-flex w-100 justify-content-between">
                                                 <h6 class="mb-1">{{ $message->admin ? $message->admin->name : '' }} <small>({{__('admin.Administrator')}})</small></h6> <small>{{ $message->created_at->diffForHumans() }} </small>
                                             </div>
-                                            <p class="mb-1">{!! html_decode(clean(nl2br($message->message))) !!}</p>
+                                            <p class="mb-1">{!! clean(nl2br(html_decode($message->message))) !!}</p>
 
                                             @if ($message->documents)
                                                 <div class="gallery">

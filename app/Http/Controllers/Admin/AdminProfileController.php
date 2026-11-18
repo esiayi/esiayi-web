@@ -34,7 +34,7 @@ class AdminProfileController extends Controller
         $rules = [
             'name'=>'required',
             'email'=>'required|unique:admins,email,'.$admin->id,
-            'password'=>'confirmed',
+            'password'=>'nullable|min:8|confirmed',
         ];
         $customMessages = [
             'name.required' => trans('admin_validation.Name is required'),

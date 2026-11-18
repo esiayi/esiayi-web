@@ -208,8 +208,8 @@ Route::group(['middleware' => ['maintainance']], function () {
     Route::post('update-profile', [UserProfileController::class, 'updateProfile'])->name('update-profile');
     Route::post('update-password', [UserProfileController::class, 'updatePassword'])->name('update-password');
     Route::get('get-invoice/{id}', [UserProfileController::class, 'get_invoice'])->name('get-invoice');
-    Route::get('mark-as-a-complete/{id}', [UserProfileController::class, 'mark_as_a_complete'])->name('mark-as-a-complete');
-    Route::get('mark-as-a-declined/{id}', [UserProfileController::class, 'mark_as_a_declined'])->name('mark-as-a-declined');
+    Route::post('mark-as-a-complete/{id}', [UserProfileController::class, 'mark_as_a_complete'])->name('mark-as-a-complete');
+    Route::post('mark-as-a-declined/{id}', [UserProfileController::class, 'mark_as_a_declined'])->name('mark-as-a-declined');
     Route::post('send-refund-request', [UserProfileController::class, 'send_refund_request'])->name('send-refund-request');
     Route::post('ticket-request', [UserProfileController::class, 'ticket_request'])->name('ticket-request');
     Route::get('show-ticket/{id}', [UserProfileController::class, 'show_ticket'])->name('show-ticket');

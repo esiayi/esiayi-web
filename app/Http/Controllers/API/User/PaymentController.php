@@ -106,6 +106,8 @@ class PaymentController extends Controller
 
         $day = date('l',strtotime($request->date));
         $appointment_schedules = AppointmentSchedule::where(['user_id' => $request->provider_id, 'day' => $day])->get();
+        // Skip slots saved with an end time before the start time.
+        $appointment_schedules = $appointment_schedules->filter(fn ($schedule) => strtotime($schedule->end_time) > strtotime($schedule->start_time));
 
         $available_schedule_arr = array();
         foreach($appointment_schedules as $appointment_schedule){

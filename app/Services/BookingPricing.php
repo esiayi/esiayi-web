@@ -77,7 +77,9 @@ class BookingPricing
         }
 
         $schedule = AppointmentSchedule::where(['id' => $scheduleId, 'user_id' => $service->provider_id, 'status' => 1])->first();
-        if (!$schedule || strcasecmp($schedule->day, date('l', $timestamp)) !== 0) {
+        if (!$schedule
+            || strcasecmp($schedule->day, date('l', $timestamp)) !== 0
+            || strtotime($schedule->end_time) <= strtotime($schedule->start_time)) {
             throw ValidationException::withMessages(['schedule_time_slot' => __('This time slot is not available on the selected date.')]);
         }
 

@@ -34,7 +34,7 @@
                                 @if ($order->order_note)
                                 <h6 class="mt-4">{{__('admin.Booking Note')}}</h6>
                                 <hr>
-                                    <p>{!! html_decode(clean(nl2br($order->order_note))) !!}</p>
+                                    <p>{!! clean(nl2br(html_decode($order->order_note))) !!}</p>
                                 @endif
 
                                 <h6 class="mt-4">{{__('admin.Client Details')}}</h6>
@@ -167,14 +167,14 @@
                                         <tr>
                                             <td>{{__('admin.Resone')}}</td>
                                             <td>
-                                                {!! html_decode(clean(nl2br($refundRequest->resone))) !!}
+                                                {!! clean(nl2br(html_decode($refundRequest->resone))) !!}
                                             </td>
                                         </tr>
 
                                         <tr>
                                             <td>{{__('admin.Account Information')}}</td>
                                             <td>
-                                                {!! html_decode(clean(nl2br($refundRequest->account_information))) !!}
+                                                {!! clean(nl2br(html_decode($refundRequest->account_information))) !!}
                                             </td>
                                         </tr>
 
@@ -230,7 +230,7 @@
                                         <tr>
                                             <td>{{__('admin.Resone')}}</td>
                                             <td>
-                                                {!! html_decode(clean(nl2br($completeRequest->resone))) !!}
+                                                {!! clean(nl2br(html_decode($completeRequest->resone))) !!}
                                             </td>
                                         </tr>
 

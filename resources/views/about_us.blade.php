@@ -4,7 +4,7 @@
     <title>{{ $seo_setting->seo_title }}</title>
 @endsection
 
-@section('title')
+@section('meta')
     <meta name="description" content="{{ $seo_setting->seo_description }}">
 @endsection
 
@@ -53,7 +53,7 @@
             <div class="col-lg-4 col-md-6">
                 <div class="wsus__work_single {{ $how_it_works->count() == ++$index ? 'last_item' : '' }}">
                     <span>
-                        <img src="{{ asset($how_it_work->image) }}" alt="work icon" class="img-fluid w-100">
+                        <img loading="lazy" src="{{ asset($how_it_work->image) }}" alt="work icon" class="img-fluid w-100">
                     </span>
                     <h4>{{ $how_it_work->title }}</h4>
                     <p>{{ $how_it_work->description }}</p>
@@ -77,12 +77,12 @@
             <div class="row">
                 <div class="col-xl-6 col-md-12 col-lg-6">
                     <div class="wsus__about_img">
-                        <img src="{{ asset($about_us_section->background_image) }}" alt="about" class="img-fluid w-100 img_1">
-                        <img src="{{ asset($about_us_section->foreground_image) }}" alt="about" class="img-fluid w-100 img_2">
+                        <img loading="lazy" src="{{ asset($about_us_section->background_image) }}" alt="about" class="img-fluid w-100 img_1">
+                        <img loading="lazy" src="{{ asset($about_us_section->foreground_image) }}" alt="about" class="img-fluid w-100 img_2">
                         <div class="wus__about_rating">
-                            <img src="{{ asset($about_us_section->client_image_one) }}" alt="about" class="img-fluid w-100 rating_img_1">
-                            <img src="{{ asset($about_us_section->client_image_two) }}" alt="about" class="img-fluid w-100 rating_img_2">
-                            <img src="{{ asset($about_us_section->client_image_three) }}" alt="about" class="img-fluid w-100 rating_img_3">
+                            <img loading="lazy" src="{{ asset($about_us_section->client_image_one) }}" alt="about" class="img-fluid w-100 rating_img_1">
+                            <img loading="lazy" src="{{ asset($about_us_section->client_image_two) }}" alt="about" class="img-fluid w-100 rating_img_2">
+                            <img loading="lazy" src="{{ asset($about_us_section->client_image_three) }}" alt="about" class="img-fluid w-100 rating_img_3">
                             <p> {{ $about_us_section->total_rating }}
                                 <span>
                                     <i class="fas fa-star"></i>
@@ -123,7 +123,7 @@
                         <div class="col-xl-3 col-sm-6 col-lg-3">
                             <div class="wsus__single_counter">
                                 <span>
-                                    <img src="{{ asset($counter->icon) }}" alt="counter" class="img-fluid w-100">
+                                    <img loading="lazy" src="{{ asset($counter->icon) }}" alt="counter" class="img-fluid w-100">
                                 </span>
                                 <h4 class="counter">{{ $counter->number }}</h4>
                                 <p>{{ $counter->title }}</p>
@@ -171,8 +171,8 @@
                 </div>
                 <div class="col-xxl-6 col-xl-5 col-lg-6">
                     <div class="wsus__about_reasons_img">
-                        <img src="{{ asset($why_choose_us->background_image) }}" alt="about reasons" class="img-fluid w-100 img_1">
-                        <img src="{{ asset($why_choose_us->foreground_image) }}" alt="about reasons" class="img-fluid w-100 img_2">
+                        <img loading="lazy" src="{{ asset($why_choose_us->background_image) }}" alt="about reasons" class="img-fluid w-100 img_1">
+                        <img loading="lazy" src="{{ asset($why_choose_us->foreground_image) }}" alt="about reasons" class="img-fluid w-100 img_2">
                     </div>
                 </div>
             </div>
@@ -226,7 +226,7 @@
                         <div class="wsus__single_testimonial">
                             <p class="review_text">{{ $testimonial->comment }}</p>
                             <div class="wsus__single_testimonial_img">
-                                <img src="{{ asset($testimonial->image) }}" alt="clients" class="img-fluid">
+                                <img loading="lazy" src="{{ asset($testimonial->image) }}" alt="clients" class="img-fluid">
                                 <p><span>{{ $testimonial->name }}</span> {{ $testimonial->designation }}</p>
                             </div>
                         </div>

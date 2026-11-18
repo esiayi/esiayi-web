@@ -1,7 +1,6 @@
 @extends($active_theme)
 @section('title')
-    <title>{{ $service->name }}</title>
-    <title>{{ $service->seo_title }}</title>
+    <title>{{ $service->seo_title ?: $service->name }}</title>
 @endsection
 @section('meta')
     <meta name="description" content="{{ $service->seo_description }}">

@@ -39,14 +39,14 @@ class AdminController extends Controller
         $rules = [
             'name' => 'required',
             'email' => 'required|unique:admins',
-            'password' => 'required|min:4',
+            'password' => 'required|min:8',
         ];
         $customMessages = [
             'name.required' => trans('admin_validation.Name is required'),
             'email.required' => trans('admin_validation.Email is required'),
             'email.unique' => trans('admin_validation.Email already exist'),
             'password.required' => trans('admin_validation.Password is required'),
-            'password.min' => trans('admin_validation.Password Must be 4 characters'),
+            'password.min' => __('Password must be at least 8 characters.'),
         ];
         $this->validate($request, $rules,$customMessages);
 

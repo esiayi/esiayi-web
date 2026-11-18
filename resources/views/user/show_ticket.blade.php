@@ -9,7 +9,7 @@
                         @if ($message->admin_id == 0)
                             <div class="wsus__support_ticket_single author_message">
                                 <h5>{{ $ticket->user->name }} <small>({{__('user.Author')}})</small> <span>{{ $message->created_at->diffForHumans() }}</span></h5>
-                                <p>{!! html_decode(clean(nl2br($message->message))) !!}</p>
+                                <p>{!! clean(nl2br(html_decode($message->message))) !!}</p>
 
                                 @if ($message->documents)
                                     <div class="gallery">
@@ -24,7 +24,7 @@
                         @else
                             <div class="wsus__support_ticket_single">
                                 <h5>{{ $message->admin ? $message->admin->name : '' }} <small>({{__('user.Administrator')}})</small>  <span>{{ $message->created_at->diffForHumans() }}</span></h5>
-                                <p>{!! html_decode(clean(nl2br($message->message))) !!}</p>
+                                <p>{!! clean(nl2br(html_decode($message->message))) !!}</p>
 
                                 @if ($message->documents)
                                     <div class="gallery">

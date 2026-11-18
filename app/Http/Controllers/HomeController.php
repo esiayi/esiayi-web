@@ -528,7 +528,7 @@ class HomeController extends Controller
             'state'=>'required',
             'service_area'=>'required',
             'address'=>'required',
-            'password'=>'required|confirmed|min:4',
+            'password'=>'required|confirmed|min:8',
             'g-recaptcha-response'=>new Captcha()
         ];
         $customMessages = [
@@ -544,7 +544,7 @@ class HomeController extends Controller
             'designation.required' => trans('user_validation.Desgination is required'),
             'address.required' => trans('user_validation.Address is required'),
             'password.required' => trans('user_validation.Password is required'),
-            'password.min' => trans('user_validation.Password must be 4 characters'),
+            'password.min' => __('Password must be at least 8 characters.'),
             'password.confirmed' => trans('user_validation.Confrim password does not match'),
         ];
         $this->validate($request, $rules,$customMessages);

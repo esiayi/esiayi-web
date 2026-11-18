@@ -22,28 +22,28 @@ import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
 window.Pusher = Pusher;
 
-let APP_URL = process.env.MIX_APP_URL
-APP_URL = `${APP_URL}/broadcasting/auth`;
+/**
+ * Realtime chat settings come from the page (window.esiayiRealtime, filled from
+ * Admin > Settings > Pusher) instead of being baked in at build time, so the same
+ * build works on every environment. Without a key, Echo is not started.
+ */
+const realtime = window.esiayiRealtime || {};
 
-window.Echo = new Echo({
-    broadcaster: 'pusher',
-    key: process.env.MIX_PUSHER_APP_KEY,
-    cluster: process.env.MIX_PUSHER_APP_CLUSTER,
-    forceTLS: true,
-    authorizer: (channel, options) => {
-        return {
+if (realtime.key) {
+    window.Echo = new Echo({
+        broadcaster: 'pusher',
+        key: realtime.key,
+        cluster: realtime.cluster,
+        forceTLS: true,
+        authorizer: (channel) => ({
             authorize: (socketId, callback) => {
-                axios.post(APP_URL, {
+                axios.post(realtime.authEndpoint, {
                         socket_id: socketId,
                         channel_name: channel.name
                     })
-                    .then(response => {
-                        callback(false, response.data);
-                    })
-                    .catch(error => {
-                        callback(true, error);
-                    });
+                    .then(response => callback(false, response.data))
+                    .catch(error => callback(true, error));
             }
-        };
-    },
-});
+        }),
+    });
+}

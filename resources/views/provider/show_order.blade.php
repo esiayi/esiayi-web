@@ -35,7 +35,7 @@
                                 @if ($order->order_note)
                                 <h6 class="mt-4">{{__('user.Booking Note')}}</h6>
                                 <hr>
-                                    <p>{!! html_decode(clean(nl2br($order->order_note))) !!}</p>
+                                    <p>{!! clean(nl2br(html_decode($order->order_note))) !!}</p>
                                 @endif
 
                                 <h6 class="mt-4">{{__('user.Client Details')}}</h6>

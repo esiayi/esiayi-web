@@ -19,6 +19,15 @@
         <link rel="icon" type="image/png" href="{{ asset($setting->favicon) }}">
         @yield('title')
         @yield('meta')
+    <link rel="canonical" href="{{ url()->current() }}">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="{{ config('app.name') }}">
+    <meta property="og:url" content="{{ url()->current() }}">
+    @hasSection('og_image')
+        @yield('og_image')
+    @elseif ($setting && $setting->logo)
+        <meta property="og:image" content="{{ asset($setting->logo) }}">
+    @endif
 
         <link rel="stylesheet" href="{{ asset('frontend/css/all.min.css') }}">
         <link rel="stylesheet" href="{{ asset('frontend/css/bootstrap.min.css') }}">
@@ -28,7 +37,7 @@
         <link rel="stylesheet" href="{{ asset('backend/css/bootstrap-datepicker.min.css') }}">
         <link rel="stylesheet" href="{{ asset('frontend/css/spacing.css') }}">
         <link rel="stylesheet" href="{{ asset('frontend/css/style.css') }}">
-        <link rel="stylesheet" href="{{ asset('frontend/css/dev.css') }}">
+        <link rel="stylesheet" href="{{ asset('frontend/css/dev.css') }}?v={{ filemtime(public_path('frontend/css/dev.css')) }}">
         <link rel="stylesheet" href="{{ asset('frontend/css/responsive.css') }}">
         <link rel="stylesheet" href="{{ asset('toastr/toastr.min.css') }}">
         @if ($setting->text_direction == 'rtl')
@@ -44,33 +53,7 @@
         <script src="{{ asset('frontend/js/flatpickr.js') }}"></script>
         <link rel="stylesheet" href="{{ asset('frontend/css/flatpickr.min.css') }}">
 
-        @if ($googleAnalytic->status == 1)
-    <script async src="https://www.googletagmanager.com/gtag/js?id={{ $googleAnalytic->analytic_id }}"></script>
-    <script>
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-        gtag('config', '{{ $googleAnalytic->analytic_id }}');
-    </script>
-    @endif
-
-    @if ($facebookPixel->status == 1)
-        <script>
-        !function(f,b,e,v,n,t,s)
-        {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-        n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-        if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-        n.queue=[];t=b.createElement(e);t.async=!0;
-        t.src=v;s=b.getElementsByTagName(e)[0];
-        s.parentNode.insertBefore(t,s)}(window, document,'script',
-        'https://connect.facebook.net/en_US/fbevents.js');
-        fbq('init', '{{ $facebookPixel->app_id }}');
-        fbq('track', 'PageView');
-        </script>
-        <noscript><img height="1" width="1" style="display:none"
-        src="https://www.facebook.com/tr?id={{ $facebookPixel->app_id }}&ev=PageView&noscript=1"
-    /></noscript>
-    @endif
+    @include('partials.tracking')
 </head>
 
 <body class="home_3">
@@ -435,13 +418,7 @@
 
     @endif
 
-    @if ($cookie_consent->status == 1)
-    <script src="{{ asset('frontend/js/cookieconsent.min.js') }}"></script>
-
-    <script>
-    window.addEventListener("load",function(){window.wpcc.init({"border":"{{ $cookie_consent->border }}","corners":"{{ $cookie_consent->corners }}","colors":{"popup":{"background":"{{ $cookie_consent->background_color }}","text":"{{ $cookie_consent->text_color }} !important","border":"{{ $cookie_consent->border_color }}"},"button":{"background":"{{ $cookie_consent->btn_bg_color }}","text":"{{ $cookie_consent->btn_text_color }}"}},"content":{"href":"{{ route('privacy-policy') }}","message":"{{ $cookie_consent->message }}","link":"{{ $cookie_consent->link_text }}","button":"{{ $cookie_consent->btn_text }}"}})});
-    </script>
-    @endif
+    @include('partials.cookie_consent')
 
 
     <!--bootstrap js-->
@@ -465,7 +442,8 @@
 
     <script src="{{ asset('toastr/toastr.min.js') }}"></script>
 
-    <script src="{{ asset('js/app.js') }}"></script>
+    @include('partials.realtime')
+    <script src="{{ asset('js/app.js') }}?v={{ filemtime(public_path('js/app.js')) }}"></script>
 
     <script>
         @if(Session::has('messege'))
@@ -627,7 +605,7 @@
         "use strict";
         $(document).ready(function () {
 
-            Echo.private("buyer-to-provider.{{$login_buyer->id}}")
+            window.Echo && window.Echo.private("buyer-to-provider.{{$login_buyer->id}}")
                 .listen('BuyerProviderMessage', (e) => {
                     let sender_provider_id = e.message[0].provider_id;
 

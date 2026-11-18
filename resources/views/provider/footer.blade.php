@@ -52,7 +52,8 @@
   <script src="{{ asset('backend/tinymce/js/tinymce/tinymce.min.js') }}"></script>
 
 
-  <script src="{{ asset('js/app.js') }}"></script>
+  @include('partials.realtime')
+  <script src="{{ asset('js/app.js') }}?v={{ filemtime(public_path('js/app.js')) }}"></script>
 
     <script>
         @if(Session::has('messege'))

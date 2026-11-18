@@ -73,7 +73,7 @@
                         @if ($prevBlog)
                             <li>
                                 <a href="{{ route('blog', $prevBlog->slug) }}">
-                                    <img src="{{ asset($prevBlog->image) }}" alt="button img" class="img-fluid w-100">
+                                    <img loading="lazy" src="{{ asset($prevBlog->image) }}" alt="button img" class="img-fluid w-100">
                                     <p>{{ $prevBlog->title }}
                                         <span> <i class="far fa-long-arrow-left"></i> {{__('user.Previous')}}</span>
                                     </p>
@@ -87,7 +87,7 @@
                                     <p>{{ $nextBlog->title }}
                                         <span>{{__('user.next')}} <i class="far fa-long-arrow-right"></i></span>
                                     </p>
-                                    <img src="{{ asset($nextBlog->image) }}" alt="button img" class="img-fluid w-100">
+                                    <img loading="lazy" src="{{ asset($nextBlog->image) }}" alt="button img" class="img-fluid w-100">
                                 </a>
                             </li>
                         @endif
@@ -100,7 +100,7 @@
 
                                 @foreach ($blog_comments as $blog_comment)
                                     <div class="wsus__single_comment m-0 border-0">
-                                        <img src="http://www.gravatar.com/avatar" alt="review" class="img-fluid">
+                                        <img loading="lazy" src="https://www.gravatar.com/avatar" alt="review" class="img-fluid">
                                         <div class="wsus__single_comm_text">
                                             <h3>{{ html_decode($blog_comment->name) }}</h3>
                                             <p>{{ html_decode($blog_comment->comment) }}</p>
@@ -178,7 +178,7 @@
                             <ul>
                                 @foreach ($popular_blogs as $popular_blog)
                                     <li>
-                                        <img src="{{ asset($popular_blog->image) }}" alt="blog" class="img-fluid w-100">
+                                        <img loading="lazy" src="{{ asset($popular_blog->image) }}" alt="blog" class="img-fluid w-100">
                                         <div class="text">
                                             <a href="{{ route('blog', $popular_blog->slug) }}">{{ $popular_blog->title }}</a>
                                             <p><i class="far fa-calendar-alt"></i> {{ $popular_blog->created_at->format('d M Y') }}</p>

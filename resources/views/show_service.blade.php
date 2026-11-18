@@ -1,8 +1,11 @@
 @extends($active_theme)
 @section('title')
-    <title>{{ $service->name }}</title>
-    <title>{{ $service->seo_title }}</title>
+    <title>{{ $service->seo_title ?: $service->name }}</title>
 @endsection
+@section('og_image')
+    <meta property="og:image" content="{{ asset($service->image) }}">
+@endsection
+
 @section('meta')
     <meta name="description" content="{{ $service->seo_description }}">
 @endsection
@@ -112,7 +115,7 @@
                                     @foreach ($reviews as $review)
                                         <div class="wsus__single_review">
                                             <div class="wsus__single_review_top">
-                                                <img src="{{ $review->user->image ? asset($review->user->image) : asset($default_avatar->image) }}" alt="review" class="img-fluid">
+                                                <img loading="lazy" src="{{ $review->user->image ? asset($review->user->image) : asset($default_avatar->image) }}" alt="review" class="img-fluid">
                                                 <div class="text">
                                                     <h3>{{ $review->user->name }}
                                                         <span>
@@ -203,7 +206,7 @@
                             </div>
                             <div class="col-12 col-md-6 col-lg-12">
                                 <div class="wsus__service_provider mt_25">
-                                    <img src="{{ $provider->image ? asset($provider->image) : asset($default_avatar->image) }}" alt="service provider"
+                                    <img loading="lazy" src="{{ $provider->image ? asset($provider->image) : asset($default_avatar->image) }}" alt="service provider"
                                         class="img-fluid w-100">
                                     <h3><a href="{{ route('providers', $provider->user_name) }}">{{ $provider->name }}</a></h3>
                                     <h6>{{__('user.Member Since')}} {{ $provider->created_at->format('M Y') }}</h6>
@@ -288,7 +291,7 @@
                 <div class="col-xl-4">
                     <div class="wsus__single_services">
                         <div class="wsus__services_img">
-                            <img src="{{ asset($related_service->image) }}" alt="service" class="img-fluid w-100">
+                            <img loading="lazy" src="{{ asset($related_service->image) }}" alt="service" class="img-fluid w-100">
                         </div>
                         <div class="wsus__services_text">
                             <ul class="d-flex justify-content-between">
@@ -299,7 +302,7 @@
                             <div
                                 class="single_service_footer d-flex flex-wrap justify-content-between align-items-center">
                                 <div class="img_area">
-                                    <img src="{{ $related_service->provider ? asset($related_service->provider->image) : '' }}" alt="user" class="img-fluid">
+                                    <img loading="lazy" src="{{ $related_service->provider ? asset($related_service->provider->image) : '' }}" alt="user" class="img-fluid">
                                     <span>{{ $related_service->provider->name }}</span>
                                 </div>
 

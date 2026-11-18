@@ -4,7 +4,7 @@
     <title>{{ $seo_setting->seo_title }}</title>
 @endsection
 
-@section('title')
+@section('meta')
     <meta name="description" content="{{ $seo_setting->seo_description }}">
 @endsection
 @section('frontend-content')
@@ -77,12 +77,12 @@
                     <div class="col-xl-2">
                         <div class="wsus__single_categories">
                             <span>
-                                <img src="{{ asset($category->icon) }}" alt="categories" class="img-fluid w-100">
+                                <img loading="lazy" src="{{ asset($category->icon) }}" alt="categories" class="img-fluid w-100">
                             </span>
                             <a href="{{ route('services',['category' => $category->slug]) }}">{{ $category->name }}</a>
                             <p>{{ $category->totalService }}+ {{__('user.Services')}}</p>
                             <div class="shapes">
-                                <img src="{{asset('frontend/images/category_shape_1.png')}}" alt="categiry" class="img-fluid w-100">
+                                <img loading="lazy" src="{{asset('frontend/images/category_shape_1.png')}}" alt="categiry" class="img-fluid w-100">
                             </div>
                         </div>
                     </div>
@@ -116,11 +116,11 @@
                     <div class="col-xl-4">
                         <div class="wsus__single_services2">
                             <div class="wsus__services_img2">
-                                <img src="{{ asset($featured_service->image) }}" alt="service" class="img-fluid w-100">
+                                <img loading="lazy" src="{{ asset($featured_service->image) }}" alt="service" class="img-fluid w-100">
                                 <a class="category" href="{{ route('services',['category'=> $featured_service->category->slug]) }}">{{ $featured_service->category->name }}</a>
                             </div>
                             <div class="wsus__services_text2">
-                                <img src="{{ $featured_service->provider ? asset($featured_service->provider->image) : '' }}" alt="user" class="img-fluid">
+                                <img loading="lazy" src="{{ $featured_service->provider ? asset($featured_service->provider->image) : '' }}" alt="user" class="img-fluid">
                                 <ul class="d-flex justify-content-between">
                                     <li>{{ $featured_service->provider->name }}</li>
 
@@ -200,7 +200,7 @@
                 <div class="row">
                     <div class="col-xl-5 col-lg-6">
                         <div class="wsus__booking_service_img">
-                            <img src="{{ asset($contact_section->foreground) }}" alt="booking" class="img-fluid w-100">
+                            <img loading="lazy" src="{{ asset($contact_section->foreground) }}" alt="booking" class="img-fluid w-100">
                             <div class="text">
                                 <span>{{ $contact_section->call_as_now }}</span>
                                 <h4>{{ $contact_section->phone }}</h4>
@@ -285,7 +285,7 @@
                         <div class="col-xl-3 col-sm-6 col-lg-3">
                             <div class="wsus__single_counter">
                                 <span>
-                                    <img src="{{ asset($counter->icon) }}" alt="counter" class="img-fluid w-100">
+                                    <img loading="lazy" src="{{ asset($counter->icon) }}" alt="counter" class="img-fluid w-100">
                                 </span>
                                 <h4 class="counter">{{ $counter->number }}</h4>
                                 <p>{{ $counter->title }}</p>
@@ -322,11 +322,11 @@
                     <div class="col-xl-4 col-md-6 col-lg-4">
                         <div class="wsus__single_services2">
                             <div class="wsus__services_img2">
-                                <img src="{{ asset($popular_service->image) }}" alt="service" class="img-fluid w-100">
+                                <img loading="lazy" src="{{ asset($popular_service->image) }}" alt="service" class="img-fluid w-100">
                                 <a class="category" href="{{ route('services',['category'=> $popular_service->category->slug]) }}">{{ $popular_service->category->name }}</a>
                             </div>
                             <div class="wsus__services_text2">
-                                <img src="{{ $popular_service->provider ? asset($popular_service->provider->image) : '' }}" alt="user" class="img-fluid">
+                                <img loading="lazy" src="{{ $popular_service->provider ? asset($popular_service->provider->image) : '' }}" alt="user" class="img-fluid">
                                 <ul class="d-flex justify-content-between">
                                     <li>{{ $popular_service->provider->name }}</li>
 
@@ -405,7 +405,7 @@
             <div class="row justify-content-between">
                 <div class="col-xl-6 col-md-5 col-lg-6">
                     <div class="wsus__app_download_img">
-                        <img src="{{ asset($mobile_app->home2_app_image) }}" alt="app download" class="img-fluid w-100">
+                        <img loading="lazy" src="{{ asset($mobile_app->home2_app_image) }}" alt="app download" class="img-fluid w-100">
                     </div>
                 </div>
                 <div class="col-xl-5 col-md-7 col-lg-6">
@@ -485,10 +485,10 @@
                         <div class="wsus__single_testimonial">
                             <p class="review_text">{{ $testimonial->comment }}</p>
                             <span class="testi_shapes">
-                                <img src="{{ asset('frontend/images/testi_shapes.png') }}" alt="testimonials" class="img-fluid w-100">
+                                <img loading="lazy" src="{{ asset('frontend/images/testi_shapes.png') }}" alt="testimonials" class="img-fluid w-100">
                             </span>
                             <div class="wsus__single_testimonial_img">
-                                <img src="{{ asset($testimonial->image) }}" alt="clients" class="img-fluid">
+                                <img loading="lazy" src="{{ asset($testimonial->image) }}" alt="clients" class="img-fluid">
                                 <p><span>{{ $testimonial->name }}</span> {{ $testimonial->designation }}</p>
                             </div>
                         </div>
@@ -522,7 +522,7 @@
                     <div class="col-lg-4 col-md-6">
                         <div class="wsus__single_blog">
                             <div class="wsus__single_blog_img">
-                                <img src="{{ asset($blog->image) }}" alt="blog" class="img-fluid w-100">
+                                <img loading="lazy" src="{{ asset($blog->image) }}" alt="blog" class="img-fluid w-100">
                             </div>
                             <div class="wsus__single_blog_text">
                                 <ul class="d-flex flex-wrap">
@@ -557,7 +557,7 @@
                                 <div class="col-xl-2 col-sm-6 col-md-4 col-lg-3">
                                     <div class="wsus__single_brand">
                                         <a href="{{ $partner->link ? $partner->link : 'javascript:;' }}">
-                                            <img src="{{ asset($partner->logo) }}" alt="brand" class="img-fluid w-100">
+                                            <img loading="lazy" src="{{ asset($partner->logo) }}" alt="brand" class="img-fluid w-100">
                                         </a>
                                     </div>
                                 </div>
@@ -594,7 +594,7 @@
                 </div>
                 <div class="col-xl-5 col-md-6 d-none d-lg-block">
                     <div class="wsus__subscribe_img">
-                        <img src="{{ asset($subscriber->foreground_image) }}" alt="subecribe" class="img-fluid w-100">
+                        <img loading="lazy" src="{{ asset($subscriber->foreground_image) }}" alt="subecribe" class="img-fluid w-100">
                     </div>
                 </div>
             </div>

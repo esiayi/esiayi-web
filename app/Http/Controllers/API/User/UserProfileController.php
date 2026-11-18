@@ -311,12 +311,12 @@ class UserProfileController extends Controller
     public function updatePassword(Request $request){
         $rules = [
             'current_password'=>'required',
-            'password'=>'required|min:4|confirmed',
+            'password'=>'required|min:8|confirmed',
         ];
         $customMessages = [
             'current_password.required' => trans('user_validation.Current password is required'),
             'password.required' => trans('user_validation.Password is required'),
-            'password.min' => trans('user_validation.Password minimum 4 character'),
+            'password.min' => __('Password must be at least 8 characters.'),
             'password.confirmed' => trans('user_validation.Confirm password does not match'),
         ];
         $this->validate($request, $rules,$customMessages);
