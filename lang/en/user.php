@@ -328,7 +328,7 @@
   'or' => 'or',
   'Sign In with Google' => 'Sign In with Google',
   'Sign In with Facebook' => 'Sign In with Facebook',
-  'Dont’t have an account ?' => 'Dont’t have an account ?',
+  'Dont’t have an account ?' => 'Don\'t have an account?',
   'Create Account' => 'Create Account',
   'Maintainance' => 'Maintenance',
   'Order Note' => 'Order Note',

@@ -1,9 +1,9 @@
 @extends($active_theme)
 @section('title')
-    <title>{{ $provider->user_name }}</title>
+    <title>{{ $provider->name }}</title>
 @endsection
 @section('meta')
-    <meta name="description" content="{{ $provider->user_name }}">
+    <meta name="description" content="{{ $provider->designation ? $provider->name.', '.$provider->designation : $provider->name }}">
 @endsection
 
 @section('frontend-content')
