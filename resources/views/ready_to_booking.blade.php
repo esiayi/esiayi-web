@@ -41,9 +41,9 @@
                 <div class="col-xl-8 col-lg-8">
                     <div class="wsus__booking_area">
                         <ul class="booking_bar d-flex flex-wrap">
-                            <li class="active">1 <span>{{__('user.Service')}}</span></li>
-                            <li>2 <span>{{__('user.Information')}}</span></li>
-                            <li>3 <span>{{__('user.Confirmation')}}</span></li>
+                            <li class="active"><b>1</b> <span>{{__('user.Service')}}</span></li>
+                            <li><b>2</b> <span>{{__('user.Information')}}</span></li>
+                            <li><b>3</b> <span>{{__('user.Confirmation')}}</span></li>
                         </ul>
                         <div class="wsus__booking_img">
                             <img src="{{ asset($service->image) }}" alt="booking images" class="img-fluid w-100">

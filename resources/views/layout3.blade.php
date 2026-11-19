@@ -40,6 +40,7 @@
         <link rel="stylesheet" href="{{ asset('frontend/css/dev.css') }}?v={{ filemtime(public_path('frontend/css/dev.css')) }}">
         <link rel="stylesheet" href="{{ asset('frontend/css/responsive.css') }}">
         <link rel="stylesheet" href="{{ asset('toastr/toastr.min.css') }}">
+    <link rel="stylesheet" href="{{ asset('frontend/css/esiayi-ui.css') }}?v={{ filemtime(public_path('frontend/css/esiayi-ui.css')) }}">
         @if ($setting->text_direction == 'rtl')
         <link rel="stylesheet" href="{{ asset('frontend/css/rtl.css') }}">
         @endif

@@ -41,9 +41,9 @@
                 <div class="col-lg-8">
                     <div class="wsus__booking_area">
                         <ul class="booking_bar d-flex flex-wrap">
-                            <li class="active">1 <span>{{__('user.Service')}}</span></li>
-                            <li class="active">2 <span>{{__('user.Information')}}</span></li>
-                            <li>3 <span>{{__('user.Confirmation')}}</span></li>
+                            <li class="active"><b>1</b> <span>{{__('user.Service')}}</span></li>
+                            <li class="active"><b>2</b> <span>{{__('user.Information')}}</span></li>
+                            <li><b>3</b> <span>{{__('user.Confirmation')}}</span></li>
                         </ul>
                         <div class="wsus__review_input mt_30 p-0 border-0">
                             <form id="customer_info_form" method="POST" action="{{ route('payment', $service->slug) }}">

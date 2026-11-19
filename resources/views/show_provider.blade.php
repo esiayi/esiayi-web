@@ -1,9 +1,9 @@
 @extends($active_theme)
 @section('title')
-    <title>{{ $provider->user_name }}</title>
+    <title>{{ $provider->name }}</title>
 @endsection
 @section('meta')
-    <meta name="description" content="{{ $provider->user_name }}">
+    <meta name="description" content="{{ $provider->designation ? $provider->name.', '.$provider->designation : $provider->name }}">
 @endsection
 
 @section('frontend-content')
@@ -18,7 +18,7 @@
                         <div class="wsus__sellar_top_text d-flex flex-wrap align-items-center">
                             <img loading="lazy" src="{{ $provider->image ? asset($provider->image) : asset($default_avatar->image) }}" alt="sellar" class="img-fluid w-100">
                             <div class="text">
-                                <h2>{{ $provider->user_name }}</h2>
+                                <h2>{{ $provider->name }}</h2>
                                 <span>{{ $provider->designation }}</span>
                                 @if ($show_provider_contact_info->status == 1)
                                     <a href="mailto:{{ $provider->email }}"><i class="fas fa-envelope"></i>

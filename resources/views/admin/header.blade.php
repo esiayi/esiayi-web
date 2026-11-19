@@ -34,6 +34,7 @@
   <link rel="stylesheet" href="{{ asset('backend/datetimepicker/jquery.datetimepicker.css') }}">
   <link rel="stylesheet" href="{{ asset('backend/css/iziToast.min.css') }}">
 
+  <link rel="stylesheet" href="{{ asset('backend/css/esiayi-ui.css') }}?v={{ filemtime(public_path('backend/css/esiayi-ui.css')) }}">
   <script src="{{ asset('backend/js/jquery-3.6.0.min.js') }}"></script>
   <style>
     .fade.in {
